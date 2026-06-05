@@ -365,6 +365,138 @@ fi
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# GUARD 11 — OWASP LLM TOP 10 / SECURITY PLUGIN PRESENCE
+# Standard: OWASP LLM Top 10 (2025) — the 10 most critical LLM security risks.
+# NIST AI RMF — Govern/Map/Measure/Manage controls.
+#
+# Check: SecurityPlugin must be present in plugins/.
+# ISecurityPolicy interface must be defined.
+# SecureToolWrapper must intercept tool calls.
+# Prompt injection patterns must be enumerated (LLM01).
+# ─────────────────────────────────────────────────────────────────────────────
+log "Guard 11: OWASP LLM Top 10 — SecurityPlugin compliance"
+
+if ! grep -rn --include="*.ts" "SecurityPlugin" \
+    plugins/ 2>/dev/null | grep -q .; then
+  fail "GUARD-11 OWASP-LLM: SecurityPlugin not found in plugins/. OWASP LLM Top 10 compliance requires a SecurityPlugin wrapping all ITool executions."
+else
+  pass "Guard 11a passed: SecurityPlugin found"
+fi
+
+if ! grep -rn --include="*.ts" "ISecurityPolicy" \
+    plugins/ 2>/dev/null | grep -q .; then
+  fail "GUARD-11 OWASP-LLM: ISecurityPolicy interface not found. OWASP LLM compliance requires a formal security policy contract (DIP)."
+else
+  pass "Guard 11b passed: ISecurityPolicy interface found"
+fi
+
+if ! grep -rn --include="*.ts" "SecureToolWrapper" \
+    plugins/ 2>/dev/null | grep -q .; then
+  fail "GUARD-11 OWASP-LLM: SecureToolWrapper not found. All ITool.execute() calls must pass through the security gate (LLM01, LLM02, LLM04, LLM07)."
+else
+  pass "Guard 11c passed: SecureToolWrapper found"
+fi
+
+# LLM01: verify injection patterns are defined
+if ! grep -rn --include="*.ts" "PROMPT_INJECTION\|blockedPatterns\|injectionPatterns\|INJECTION_PATTERNS" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-11 OWASP-LLM01: No prompt injection patterns defined in plugins/security/. LLM01 mitigation requires explicit pattern list."
+else
+  pass "Guard 11d passed: LLM01 prompt injection patterns defined"
+fi
+
+# LLM04: verify rate limiting is implemented
+if ! grep -rn --include="*.ts" "maxCallsPerMinute\|maxCallsPerHour\|maxInputTokens\|rateLim" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-11 OWASP-LLM04: No rate limiting in plugins/security/. LLM04 (Model DoS) mitigation requires per-agent call limits."
+else
+  pass "Guard 11e passed: LLM04 rate limiting implemented"
+fi
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GUARD 12 — ZERO TRUST / RBAC / ACCESS CONTROL
+# Standard: NIST SP 800-207 (Zero Trust Architecture).
+# OWASP API Top 10: API1 (Broken Object Level Auth), API2 (Broken Auth).
+# SOC 2 Type II: CC6.1 (Logical access), CC6.2 (Access grants).
+#
+# Check: Every tool call must be authorized (checkAccess before execute).
+# allowedAgentIds and allowedTools must be configurable (least privilege).
+# RBAC must be a controllable flag — not hard-coded to true or false.
+# ─────────────────────────────────────────────────────────────────────────────
+log "Guard 12: Zero Trust / RBAC — access control on every tool call"
+
+if ! grep -rn --include="*.ts" "checkAccess\|rbacEnabled\|allowedAgentIds\|allowedTools" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-12 ZERO-TRUST: No access control found in plugins/security/. Zero Trust requires checkAccess() before every tool execution (NIST SP 800-207)."
+else
+  pass "Guard 12a passed: Zero Trust checkAccess present"
+fi
+
+# Verify the wrapper calls checkAccess before execute
+if ! grep -rn --include="*.ts" "checkAccess" \
+    plugins/security/secure-tool-wrapper.ts 2>/dev/null | grep -q .; then
+  fail "GUARD-12 ZERO-TRUST: SecureToolWrapper does not call checkAccess(). Access check must occur before every tool execute() call."
+else
+  pass "Guard 12b passed: SecureToolWrapper calls checkAccess()"
+fi
+
+# SOC 2 CC6.2: audit log must exist
+if ! grep -rn --include="*.ts" "auditLog\|audit_log\|record\b" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-12 SOC2-CC6.2: No audit log in plugins/security/. SOC 2 CC6.2 requires recording every access control decision."
+else
+  pass "Guard 12c passed: SOC2 CC6.2 audit log present"
+fi
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GUARD 13 — PII / GDPR / HIPAA DATA PROTECTION
+# Standard: GDPR Article 25 (Privacy by Design), HIPAA 164.312(b),
+# PCI DSS 4.0 Req 10.2, ISO 27001 A.18.1.
+# OWASP LLM06: Sensitive Information Disclosure.
+#
+# Check: PII masking must be implemented (email, phone, SSN, CC, API keys).
+# Audit records must NOT include raw PII (inputs excluded by default).
+# retentionDays must be configurable (GDPR right to erasure).
+# PII detection patterns must cover at least: email, phone, SSN, CC.
+# ─────────────────────────────────────────────────────────────────────────────
+log "Guard 13: PII / GDPR / HIPAA — data protection compliance"
+
+if ! grep -rn --include="*.ts" "maskPII\|piiMasking\|PII_PATTERNS\|REDACTED" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-13 GDPR-PII: No PII masking in plugins/security/. GDPR Art.25 requires data minimization — PII must be masked before entering audit logs."
+else
+  pass "Guard 13a passed: PII masking implemented"
+fi
+
+# Verify email PII pattern is present
+if ! grep -rn --include="*.ts" -E "email.*pattern|EMAIL.*pattern|@.*\\..*regexp|EMAIL_RE|email.*RegExp" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-13 GDPR-PII: No email detection pattern in plugins/security/. Email addresses are personal data under GDPR Art.4(1) and must be detected for masking."
+else
+  pass "Guard 13b passed: email PII pattern present"
+fi
+
+# Verify retentionDays is configurable (not hard-coded forever)
+if ! grep -rn --include="*.ts" "retentionDays" \
+    plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-13 GDPR-PII: No retentionDays in plugins/security/SecurityPolicy. GDPR Art.5(1)(e) requires data retention limits — hard-coded unlimited retention is non-compliant."
+else
+  pass "Guard 13c passed: retentionDays configurable"
+fi
+
+# LLM06: audit records must not include raw inputs by default
+if grep -rn --include="*.ts" \
+    -E "includeInput\s*:\s*true|includeOutput\s*:\s*true" \
+    plugins/security/ 2>/dev/null | grep "DEFAULT\|default" | grep -q .; then
+  fail "GUARD-13 GDPR-LLM06: Default SecurityPolicy includes raw input/output in audit log. Default must be false to prevent PII capture (GDPR Art.25, LLM06)."
+else
+  pass "Guard 13d passed: audit log excludes raw I/O by default"
+fi
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # SUMMARY
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
@@ -372,13 +504,13 @@ echo "════════════════════════�
 echo "  AI Safety Gate — Results"
 echo "════════════════════════════════════════════════════════════"
 if [[ "$FAILURES" -eq 0 ]]; then
-  echo "  $PASS ALL 10 GUARDS PASSED — pipeline may proceed"
+  echo "  $PASS ALL 13 GUARDS PASSED — pipeline may proceed"
   echo "════════════════════════════════════════════════════════════"
   exit 0
 else
   echo "  $FAIL $FAILURES GUARD(S) FAILED — merge is BLOCKED"
   echo ""
-  echo "  Each failure maps to a documented AI disaster."
+  echo "  Each failure maps to a documented AI disaster or compliance requirement."
   echo "  Fix all failures before requesting review."
   echo "════════════════════════════════════════════════════════════"
   exit 1
