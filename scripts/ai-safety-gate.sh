@@ -228,7 +228,7 @@ fi
 # Verify FSM state is only mutated through transition()
 DIRECT_FSM_MUTATION=$(grep -rn --include="*.ts" \
     -E "\.fsm\s*=" \
-    $SRC_DIRS 2>/dev/null | grep -v "\.d\.ts" | grep -v "transition\|readonly" | wc -l || echo "0")
+    $SRC_DIRS 2>/dev/null | grep -v "\.d\.ts" | grep -v "transition\|readonly" | wc -l | xargs)
 if [[ "$DIRECT_FSM_MUTATION" -gt 0 ]]; then
   fail "GUARD-6 FSM-INTEGRITY: Direct mutation of .fsm detected ($DIRECT_FSM_MUTATION occurrence(s)). FSM state must only change via SessionState.transition()."
 else
@@ -281,7 +281,7 @@ log "Guard 8: Plugin Isolation — no direct core internals access"
 # not from core/agent.ts, core/state.ts, core/pipeline.ts etc. (implementation)
 PLUGIN_INTERNAL_IMPORT=$(grep -rn --include="*.ts" \
     -E "from '../../core/(agent|state|pipeline|lifecycle|orchestrator|artifacts|registry)'" \
-    plugins/ 2>/dev/null | grep -v "base-plugin" | wc -l || echo "0")
+    plugins/ 2>/dev/null | grep -v "base-plugin" | wc -l | xargs)
 if [[ "$PLUGIN_INTERNAL_IMPORT" -gt 0 ]]; then
   fail "GUARD-8 PLUGIN-ISOLATION: Plugin(s) import from core implementation files ($PLUGIN_INTERNAL_IMPORT import(s)). Plugins must only import from 'core/protocols.js'."
 else
@@ -289,7 +289,7 @@ else
 fi
 
 # Every concrete plugin must implement onDispose()
-PLUGINS_WITHOUT_DISPOSE=$(grep -rLn "onDispose" plugins/*/index.ts 2>/dev/null | wc -l || echo "0")
+PLUGINS_WITHOUT_DISPOSE=$(grep -rLn "onDispose" plugins/*/index.ts 2>/dev/null | wc -l | xargs)
 if [[ "$PLUGINS_WITHOUT_DISPOSE" -gt 0 ]]; then
   fail "GUARD-8 PLUGIN-ISOLATION: $PLUGINS_WITHOUT_DISPOSE plugin file(s) missing onDispose(). All plugins must implement onDispose() for safe resource release."
 else
@@ -349,7 +349,7 @@ log "Guard 10: Output Integrity — no unvalidated free-form emission"
 RAW_ARTIFACT=$(grep -rn --include="*.ts" \
     -E "return\s*\{\s*content:\s*['\"]" \
     core/ 2>/dev/null | grep -v "ArtifactFactory\|buildError\|buildScopeExit\|buildMissingInputs\|interface\|//\|test" \
-    | wc -l || echo "0")
+    | wc -l | xargs)
 if [[ "$RAW_ARTIFACT" -gt 0 ]]; then
   fail "GUARD-10 OUTPUT-INTEGRITY: $RAW_ARTIFACT raw Artifact-shaped object(s) returned without ArtifactFactory. All artifacts must be built through IArtifactFactory to ensure invariant validation."
 else

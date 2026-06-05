@@ -1,7 +1,7 @@
 name: CI Core
 
 # Runs on every push and PR to any branch.
-# Enforces: TypeScript build, SDD conformance, and all 10 AI Safety Guards.
+# Enforces: TypeScript build, conformance tests, SDD static check, and AI Safety Guards.
 
 on:
   push:
@@ -38,6 +38,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Run conformance tests
+        run: node --test dist/testing/conformance/*.test.js
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
@@ -116,7 +119,6 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
 
   # ── 6. Dependency Audit ───────────────────────────────────────────────────
   # Guard 7: Supply chain — npm audit for HIGH/CRITICAL vulnerabilities

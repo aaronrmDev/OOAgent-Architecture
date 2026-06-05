@@ -43,7 +43,7 @@
     "build": "tsc",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest"
+    "test": "node --test dist/testing/conformance/*.test.js"
   },
   "license": "MIT",
   "devDependencies": {

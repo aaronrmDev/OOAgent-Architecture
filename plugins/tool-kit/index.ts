@@ -28,6 +28,8 @@ export class ToolKitPlugin extends AbstractPlugin {
     this._opts = { datetime: true, calculator: true, httpFetch: {}, ...opts }
   }
 
+  override onDispose(): void {}
+
   override contributes(): PluginContributions {
     const tools = []
     if (this._opts.datetime    !== false) tools.push(new DateTimeTool())

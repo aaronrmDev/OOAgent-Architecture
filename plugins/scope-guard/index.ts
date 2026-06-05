@@ -92,6 +92,8 @@ export class ScopeGuardPlugin extends AbstractPlugin implements IPlugin {
     )
   }
 
+  override onDispose(): void {}
+
   override contributes(): PluginContributions {
     return { contexts: [this._context] }
   }
