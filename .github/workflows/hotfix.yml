@@ -1,0 +1,114 @@
+name: Hotfix
+
+# Emergency fix pipeline — runs on hotfix/* branches.
+# Faster than full release but still enforces AI Safety Gate.
+# On merge: auto-merges back to BOTH master and develop (Gitflow contract).
+#
+# Hotfix process:
+#   1. git checkout -b hotfix/2026.06.02 master
+#   2. Fix the issue + bump NN in version
+#   3. Push → this workflow runs (expedited)
+#   4. Create PRs to master AND develop
+#   5. Both merges required before closing hotfix branch
+
+on:
+  push:
+    branches: ['hotfix/**']
+  pull_request:
+    branches: [master, develop]
+    types: [closed]
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ── Expedited Critical Path ───────────────────────────────────────────────
+  hotfix-checks:
+    name: Hotfix Critical Path
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # AI Safety Gate is MANDATORY even on hotfix — disasters don't respect urgency
+      - name: AI Safety Gate (NON-NEGOTIABLE)
+        run: |
+          echo "⚡ HOTFIX: AI Safety Gate is mandatory even under time pressure."
+          echo "   A security patch that introduces a new disaster is worse than no patch."
+          bash scripts/ai-safety-gate.sh
+
+      - name: Version check
+        run: bash scripts/version-check.sh
+
+      - name: Core tests (fast subset)
+        run: npm test -- --passWithNoTests --testPathPattern="core|testing"
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+
+  # ── Verify hotfix is branched from master ─────────────────────────────────
+  base-check:
+    name: Verify Hotfix Base Branch
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/heads/hotfix/')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check hotfix branches from master
+        run: |
+          MERGE_BASE=$(git merge-base origin/master HEAD)
+          MASTER_TIP=$(git rev-parse origin/master)
+          if [[ "$MERGE_BASE" != "$MASTER_TIP" ]]; then
+            echo "❌ Hotfix branch does not start from the latest master tip."
+            echo "   Hotfixes must branch from master, not develop."
+            echo "   Rebase: git rebase origin/master"
+            exit 1
+          fi
+          echo "✅ Hotfix correctly branched from master"
+
+  # ── Auto-create PR to develop (Gitflow contract) ──────────────────────────
+  backport-pr:
+    name: Open Backport PR → develop
+    runs-on: ubuntu-latest
+    needs: hotfix-checks
+    if: startsWith(github.ref, 'refs/heads/hotfix/')
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create backport PR to develop
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          PR_EXISTS=$(gh pr list --base develop --head "$BRANCH" --json number --jq 'length')
+          if [[ "$PR_EXISTS" -eq 0 ]]; then
+            gh pr create \
+              --title "hotfix: backport $BRANCH to develop" \
+              --body "Automatic backport of hotfix \`$BRANCH\` to \`develop\` (Gitflow contract).
+
+          **This PR must be merged to develop after merging to master.**
+
+          - [ ] AI Safety Gate passed
+          - [ ] Version bump applied
+          - [ ] Tested on develop" \
+              --base develop \
+              --head "$BRANCH"
+            echo "✅ Backport PR created → develop"
+          else
+            echo "ℹ️  Backport PR already exists"
+          fi
