@@ -1,0 +1,148 @@
+name: Feature PR Gate
+
+# Runs on pull requests targeting develop.
+# Enforces Spec Driven Development: no interface change without a conformance
+# test. Detects protocol drift in core/protocols.ts.
+
+on:
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened]
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ── SDD Protocol Drift Detection ──────────────────────────────────────────
+  # If core/protocols.ts changed, ensure:
+  #   a) The change is additive (minor bump) or breaking (major bump)
+  #   b) CLAUDE.md §18 versioning rules are followed
+  protocol-drift:
+    name: SDD Protocol Drift Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for core/protocols.ts changes
+        id: proto_changed
+        run: |
+          if git diff origin/develop...HEAD -- core/protocols.ts | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "⚠️  core/protocols.ts has changed — checking for conformance tests..."
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "✅ core/protocols.ts unchanged"
+          fi
+
+      - name: Verify conformance tests updated with protocol changes
+        if: steps.proto_changed.outputs.changed == 'true'
+        run: |
+          TESTING_CHANGED=$(git diff origin/develop...HEAD -- testing/ | grep -c "^+" || echo "0")
+          if [[ "$TESTING_CHANGED" -lt 5 ]]; then
+            echo "❌ core/protocols.ts changed but testing/ has fewer than 5 new lines."
+            echo "   Every interface change requires updated conformance tests (§17 CLAUDE.md)."
+            exit 1
+          fi
+          echo "✅ testing/ updated alongside protocol changes ($TESTING_CHANGED new lines)"
+
+      - name: Check version bump for breaking changes
+        if: steps.proto_changed.outputs.changed == 'true'
+        run: |
+          # Detect removed exports (breaking change) → requires major version bump
+          REMOVED=$(git diff origin/develop...HEAD -- core/protocols.ts | grep "^-export" | wc -l)
+          if [[ "$REMOVED" -gt 0 ]]; then
+            echo "⚠️  $REMOVED export(s) removed from core/protocols.ts — this is a breaking change."
+            echo "   Per §18 CLAUDE.md: breaking interface changes require a major version bump."
+            echo "   Current package.json version must increment the year or month component."
+          fi
+
+  # ── Plugin Contribution Verification ──────────────────────────────────────
+  # Every new plugin added in this PR must declare contributes() and onDispose()
+  plugin-contributions:
+    name: Plugin Contribution Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check new plugins for required IPlugin interface
+        run: |
+          FAILURES=0
+          NEW_PLUGIN_FILES=$(git diff origin/develop...HEAD --name-only | grep "^plugins/" | grep "index.ts" || true)
+
+          for plugin_file in $NEW_PLUGIN_FILES; do
+            if [[ -f "$plugin_file" ]]; then
+              if ! grep -q "contributes()" "$plugin_file"; then
+                echo "❌ $plugin_file is missing contributes() — required by IPlugin interface"
+                FAILURES=$((FAILURES + 1))
+              fi
+              if ! grep -q "onDispose()" "$plugin_file"; then
+                echo "❌ $plugin_file is missing onDispose() — required by IPlugin interface"
+                FAILURES=$((FAILURES + 1))
+              fi
+              if ! grep -q "readonly pluginId" "$plugin_file"; then
+                echo "❌ $plugin_file is missing pluginId — required by IPlugin interface"
+                FAILURES=$((FAILURES + 1))
+              fi
+              if ! grep -q "readonly version" "$plugin_file"; then
+                echo "❌ $plugin_file is missing version — required by IPlugin interface"
+                FAILURES=$((FAILURES + 1))
+              fi
+            fi
+          done
+
+          if [[ "$FAILURES" -gt 0 ]]; then
+            exit 1
+          fi
+          echo "✅ All new plugins satisfy IPlugin interface requirements"
+
+  # ── CONTEXT.md Requirement ────────────────────────────────────────────────
+  # Every new IDomainContext implementation must ship a CONTEXT.md (§14)
+  context-md:
+    name: CONTEXT.md Requirement (§14 CLAUDE.md)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check new contexts for CONTEXT.md
+        run: |
+          FAILURES=0
+          NEW_CONTEXT_DIRS=$(git diff origin/develop...HEAD --name-only \
+            | grep "^contexts/" | grep -v "null_context\|index\.ts" \
+            | sed 's|/[^/]*$||' | sort -u || true)
+
+          for ctx_dir in $NEW_CONTEXT_DIRS; do
+            if [[ -d "$ctx_dir" ]] && [[ ! -f "${ctx_dir}/CONTEXT.md" ]]; then
+              echo "❌ $ctx_dir is missing CONTEXT.md (§14 CLAUDE.md)"
+              FAILURES=$((FAILURES + 1))
+            fi
+          done
+
+          if [[ "$FAILURES" -gt 0 ]]; then
+            exit 1
+          fi
+          echo "✅ All new domain contexts have CONTEXT.md"
+
+  # ── PR Title SDD Format ───────────────────────────────────────────────────
+  pr-title:
+    name: PR Title Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title follows Conventional Commits
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if echo "$PR_TITLE" | grep -qE "^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?: .{1,72}$"; then
+            echo "✅ PR title follows Conventional Commits: $PR_TITLE"
+          else
+            echo "❌ PR title does not follow Conventional Commits format."
+            echo "   Expected: <type>(<scope>): <description>"
+            echo "   Types: feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert"
+            echo "   Max description length: 72 chars"
+            exit 1
+          fi

@@ -1,0 +1,25 @@
+{
+  "name": "@ooagent/mcp-server",
+  "version": "2026.06.01",
+  "description": "OOAgent MCP (Model Context Protocol) server — exposes OOAgent tools and contexts to Claude",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "ooagent-mcp": "./dist/bin/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/bin/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["mcp", "model-context-protocol", "claude", "ooagent", "ai-agent"],
+  "license": "MIT",
+  "peerDependencies": {
+    "ooagent": ">=2026.06.01"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

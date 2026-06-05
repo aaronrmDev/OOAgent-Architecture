@@ -1,6 +1,6 @@
 {
   "name": "ooagent",
-  "version": "1.0.0",
+  "version": "2026.06.01",
   "description": "Object-Oriented AI Agent Framework — backend-agnostic, domain-agnostic",
   "type": "module",
   "main": "./dist/index.js",
@@ -33,6 +33,10 @@
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
+    },
+    "./data": {
+      "types": "./dist/adapters/data/index.d.ts",
+      "default": "./dist/adapters/data/index.js"
     }
   },
   "scripts": {
