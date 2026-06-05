@@ -28,3 +28,26 @@ export type { AuditPluginOptions, AuditEntry } from './audit/index.js'
 
 export { ScopeGuardPlugin }     from './scope-guard/index.js'
 export type { ScopeGuardOptions } from './scope-guard/index.js'
+
+export {
+  SecurityPlugin,
+  DefaultSecurityPolicy,
+  DEFAULT_SECURITY_POLICY,
+  SecureToolWrapper,
+}                               from './security/index.js'
+export type {
+  SecurityPluginOptions,
+  ISecurityPolicy,
+  SecurityPolicy,
+  SecurityEvent,
+  SecurityEventSeverity,
+  OWASPLLMRisk,
+  ComplianceFramework,
+  RateLimitPolicy,
+  InputValidationPolicy,
+  OutputValidationPolicy,
+  AccessControlPolicy,
+  AuditPolicy,
+  BudgetPolicy,
+  SecurityValidationResult,
+}                               from './security/index.js'
