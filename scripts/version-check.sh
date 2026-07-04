@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/version-check.sh
-# Validates that package.json version follows the YYYY.MM.NN convention.
+# Validates that pyproject.toml version follows the YYYY.MM.NN convention.
 # Also validates that release branch names match: release/YYYY.MM.NN
 #
 # YYYY = 4-digit year
@@ -8,7 +8,7 @@
 # NN   = 2-digit sequential build number within the month (01-99)
 #
 # Usage:
-#   bash scripts/version-check.sh                  # validates package.json
+#   bash scripts/version-check.sh                  # validates pyproject.toml
 #   bash scripts/version-check.sh release/2026.06.02  # validates branch name
 
 set -euo pipefail
@@ -31,18 +31,18 @@ if [[ $# -gt 0 ]]; then
   fi
 fi
 
-# ── package.json version validation ─────────────────────────────────────────
-if [[ ! -f "package.json" ]]; then
-  fail "package.json not found in working directory"
+# ── pyproject.toml version validation ───────────────────────────────────────
+if [[ ! -f "pyproject.toml" ]]; then
+  fail "pyproject.toml not found in working directory"
 fi
 
-PKG_VERSION=$(node -p "require('./package.json').version" 2>/dev/null) || \
-  fail "Cannot parse package.json"
+PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])" 2>/dev/null) || \
+  fail "Cannot parse pyproject.toml"
 
 if [[ "$PKG_VERSION" =~ $VERSION_REGEX ]]; then
-  pass "package.json version '$PKG_VERSION' follows YYYY.MM.NN convention"
+  pass "pyproject.toml version '$PKG_VERSION' follows YYYY.MM.NN convention"
 else
-  fail "package.json version '$PKG_VERSION' does not follow YYYY.MM.NN convention. Expected format: YYYY.MM.NN (e.g. 2026.06.01)"
+  fail "pyproject.toml version '$PKG_VERSION' does not follow YYYY.MM.NN convention. Expected format: YYYY.MM.NN (e.g. 2026.06.01)"
 fi
 
 # ── Year sanity check ────────────────────────────────────────────────────────
