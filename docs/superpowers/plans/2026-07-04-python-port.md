@@ -7116,6 +7116,19 @@ def test_mask_pii_redacts_email() -> None:
     assert "[EMAIL_REDACTED]" in masked
 
 
+def test_mask_pii_labels_credit_card_correctly_not_as_phone() -> None:
+    masked = DefaultSecurityPolicy.mask_pii("card: 4111111111111111")
+    assert "[CC_REDACTED]" in masked
+    assert "[PHONE_REDACTED]" not in masked
+    assert "4111111111111111" not in masked
+
+
+def test_mask_pii_still_labels_real_phone_numbers_as_phone() -> None:
+    masked = DefaultSecurityPolicy.mask_pii("call me at 555-123-4567")
+    assert "[PHONE_REDACTED]" in masked
+    assert "555-123-4567" not in masked
+
+
 async def test_secure_tool_wrapper_blocks_flagged_input_without_calling_inner() -> None:
     calls = {"n": 0}
 
@@ -7406,17 +7419,18 @@ class _PiiPattern:
     replacement: str
 
 
-# PII patterns for masking (GDPR Art.25, LLM06)
+# PII patterns for masking (GDPR Art.25, LLM06). Order matters: the "phone"
+# regex is broad enough to match any 10+-digit run with optional separators,
+# including an unformatted 16-digit credit card number — so the specific
+# fixed-format "ssn"/"cc" patterns must run first, or a card number gets
+# masked but mislabeled as [PHONE_REDACTED] instead of [CC_REDACTED],
+# undermining PCI DSS audit-trail accuracy (no raw-PII leak either way, but
+# the label matters for compliance reporting).
 PII_PATTERNS: list[_PiiPattern] = [
     _PiiPattern(
         "email",
         re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
         "[EMAIL_REDACTED]",
-    ),
-    _PiiPattern(
-        "phone",
-        re.compile(r"\+?[0-9]{1,3}[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"),
-        "[PHONE_REDACTED]",
     ),
     _PiiPattern(
         "ssn",
@@ -7427,6 +7441,11 @@ PII_PATTERNS: list[_PiiPattern] = [
         "cc",
         re.compile(r"\b(?:\d{4}[\s-]?){3}\d{4}\b"),
         "[CC_REDACTED]",
+    ),
+    _PiiPattern(
+        "phone",
+        re.compile(r"\+?[0-9]{1,3}[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"),
+        "[PHONE_REDACTED]",
     ),
     _PiiPattern(
         "api_key",
@@ -8064,7 +8083,7 @@ class SecurityPlugin(IPlugin):
 - [ ] **Step 7: Run test to verify it passes**
 
 Run: `PYTHONPATH=src python -m pytest tests/plugins/test_security.py -v`
-Expected: `5 passed`
+Expected: `8 passed`
 
 - [ ] **Step 8: Commit**
 
