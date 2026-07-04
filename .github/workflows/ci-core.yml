@@ -79,8 +79,13 @@ jobs:
         run: uv run bash scripts/conformance-check.sh
 
   # ── 4. AI Safety Gate ─────────────────────────────────────────────────────
-  # Each of the 10 guards maps to documented AI disasters (2020-2026).
+  # Each of the 13 guards maps to documented AI disasters (2020-2026).
   # A failing guard BLOCKS the merge — it is not advisory.
+  # NOTE: the job `name:` below intentionally still says "10 Disaster Guards"
+  # even though scripts/ai-safety-gate.sh now has 13 guards — GitHub branch
+  # protection matches required status checks by this exact displayed name,
+  # so renaming it needs a deliberate, reviewed change to branch protection
+  # settings, not a silent rename here.
   ai-safety-gate:
     name: AI Safety Gate (10 Disaster Guards)
     runs-on: ubuntu-latest
