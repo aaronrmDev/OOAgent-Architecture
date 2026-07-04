@@ -2382,6 +2382,74 @@ async def test_dispose_is_idempotent_by_raising_on_second_call() -> None:
 async def test_agent_id_is_generated_when_not_supplied() -> None:
     agent = OOAgent(llm_client=_StubLLMClient())
     assert len(agent.agent_id) > 0
+
+
+async def test_respond_recovers_when_artifact_factory_raises_during_delivering() -> None:
+    # An exception raised inside the DELIVERING block (e.g. from a
+    # third-party ResponseDecorator — a legitimate OCP extension point) must
+    # not leave the FSM stuck at DELIVERING, since DELIVERING's only legal
+    # transition is to IDLE — a stuck FSM would brick every future
+    # respond() call with FSMViolationError.
+    agent = OOAgent(llm_client=_StubLLMClient())
+    await agent.initialize(AgentConfig())
+
+    def _boom(artifact, provenance):
+        raise RuntimeError("boom")
+
+    agent._decorator.add_decorator(_boom)
+
+    artifact = await agent.respond(Query(text="hello agent"))
+    assert "boom" in artifact.content
+    assert agent.state.fsm == "IDLE"
+
+    # Second call must not raise FSMViolationError — the agent is not bricked.
+    artifact2 = await agent.respond(Query(text="hello again"))
+    assert "boom" in artifact2.content
+    assert agent.state.fsm == "IDLE"
+
+    await agent.dispose()
+
+
+class _AlwaysFailingLLMClient(ILLMClient):
+    async def complete(self, request):
+        raise RuntimeError("llm down")
+
+    async def stream(self, request):
+        yield CompletionChunk(delta="", done=True)
+
+    @property
+    def model_id(self):
+        return "stub-fail"
+
+    @property
+    def vendor(self):
+        return "anthropic"
+
+    @property
+    def max_tokens(self):
+        return 4096
+
+    @property
+    def supports_tools(self):
+        return False
+
+
+async def test_llm_failure_increments_circuit_breaker_by_exactly_one() -> None:
+    # _handle_failure() used to unconditionally call record_llm_failure() in
+    # addition to the one already recorded inside _llm_tool_loop's except
+    # block, double-counting a single real LLM failure as two
+    # circuit-breaker failures. With threshold=2, a single respond() failure
+    # must NOT open the breaker; only the second must.
+    agent = OOAgent(llm_client=_AlwaysFailingLLMClient())
+    await agent.initialize(AgentConfig(circuit_breaker_threshold=2))
+
+    await agent.respond(Query(text="hello agent"))
+    assert await agent._lifecycle.health_check() == "healthy"
+
+    await agent.respond(Query(text="hello again"))
+    assert await agent._lifecycle.health_check() == "degraded"
+
+    await agent.dispose()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -2550,10 +2618,13 @@ class OOAgent(LLMAgent[Query, Artifact]):
             self._provenance.clear()
             self._state.transition("GATHERING")
 
-            context = self._ctx_registry.resolve(query)
-            self._state.set_context(context.name)
-            pipeline = self._pipeline.extend(context.pipeline())
-            snapshot = self._state.snapshot()
+            try:
+                context = self._ctx_registry.resolve(query)
+                self._state.set_context(context.name)
+                pipeline = self._pipeline.extend(context.pipeline())
+                snapshot = self._state.snapshot()
+            except Exception as err:
+                return self._handle_unrecoverable_failure(err, None)
 
             self._state.transition("MODELING")
             try:
@@ -2574,33 +2645,36 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 return self._handle_failure(err, context, snapshot.id)
 
             self._state.transition("DELIVERING")
-            format: ArtifactFormat = (
-                query.format
-                or (context.artifact_preferences().preferred_formats or ["text"])[0]
-            )
-            artifact = self._artifact_factory.build(
-                solution, format, context.artifact_preferences()
-            )
-            enriched = self._decorator.apply(artifact, self._provenance.dump())
+            try:
+                format: ArtifactFormat = (
+                    query.format
+                    or (context.artifact_preferences().preferred_formats or ["text"])[0]
+                )
+                artifact = self._artifact_factory.build(
+                    solution, format, context.artifact_preferences()
+                )
+                enriched = self._decorator.apply(artifact, self._provenance.dump())
 
-            cmd = Command(
-                id=str(uuid.uuid4()),
-                query=query,
-                solution=solution,
-                context_name=context.name,
-                trace=self._state.trace,
-                timestamp=time.time(),
-            )
-            self._state.commit(cmd)
-            self._state.reset()
+                cmd = Command(
+                    id=str(uuid.uuid4()),
+                    query=query,
+                    solution=solution,
+                    context_name=context.name,
+                    trace=self._state.trace,
+                    timestamp=time.time(),
+                )
+                self._state.commit(cmd)
+                self._state.reset()
 
-            self._telemetry.event(
-                "turn.complete",
-                {"context": context.name, "format": format, "turn": self._state.turn},
-            )
+                self._telemetry.event(
+                    "turn.complete",
+                    {"context": context.name, "format": format, "turn": self._state.turn},
+                )
 
-            self._lifecycle.record_llm_success()
-            return enriched
+                self._lifecycle.record_llm_success()
+                return enriched
+            except Exception as err:
+                return self._handle_unrecoverable_failure(err, context)
 
         return await self._telemetry.span("agent.turn", _turn)
 
@@ -2689,6 +2763,23 @@ class OOAgent(LLMAgent[Query, Artifact]):
             artifact = self._artifact_factory.build_error(str(err), context.name)
         self._state.transition("DELIVERING")
         self._state.reset()
+        return artifact
+
+    def _handle_unrecoverable_failure(
+        self, err: Exception, context: IDomainContext | None
+    ) -> Artifact:
+        """Recovers from failures in phases that have no legal FSM path to
+        FAILURE (context resolution during GATHERING's un-guarded prelude,
+        and the DELIVERING block itself, per VALID_TRANSITIONS in state.py —
+        `DELIVERING: {IDLE}` is the only legal exit). `reset()` force-assigns
+        `_fsm = IDLE` unconditionally, bypassing the transition-legality
+        check, which is the only way to safely recover from any state."""
+        context_name = context.name if context is not None else "unknown"
+        if isinstance(err, ScopeExitError):
+            artifact = self._artifact_factory.build_scope_exit(context_name, err.query)
+        else:
+            artifact = self._artifact_factory.build_error(str(err), context_name)
+        self._state.reset()
         self._lifecycle.record_llm_failure()
         return artifact
 ```
@@ -2696,7 +2787,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=src python -m pytest tests/core/test_agent.py -v`
-Expected: `4 passed`
+Expected: `6 passed`
 
 - [ ] **Step 5: Write the `core/__init__.py` barrel**
 
@@ -2716,7 +2807,7 @@ from ooagent.core.state import SessionState
 - [ ] **Step 6: Run the full core test suite to confirm the barrel doesn't break anything**
 
 Run: `PYTHONPATH=src python -m pytest tests/core/ -v`
-Expected: `35 passed` (5 + 6 + 5 + 5 + 4 + 6 + 5 + 4 = 40; exact count may vary slightly by fixture — confirm 0 failed, 0 errors)
+Expected: `42 passed` (5 + 7 + 5 + 5 + 4 + 6 + 4 + 6 = 42, after the Task 3 restore()-turn test and the two Task 9 FSM/circuit-breaker regression tests above; exact count may vary slightly by fixture — confirm 0 failed, 0 errors)
 
 - [ ] **Step 7: Commit**
 
