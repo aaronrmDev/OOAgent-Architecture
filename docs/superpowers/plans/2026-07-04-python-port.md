@@ -3996,7 +3996,7 @@ __all__ = [
 - [ ] **Step 9: Run test to verify it passes**
 
 Run: `PYTHONPATH=src python -m pytest tests/adapters/test_llm_adapters.py -v`
-Expected: `7 passed`
+Expected: `6 passed`
 
 - [ ] **Step 10: Commit**
 
