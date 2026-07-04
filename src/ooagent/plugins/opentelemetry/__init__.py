@@ -17,8 +17,9 @@ imported here.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
@@ -28,6 +29,24 @@ from ooagent.plugins.base_plugin import AbstractPlugin
 _logger = logging.getLogger("ooagent.plugins.opentelemetry")
 
 T = TypeVar("T")
+
+
+def _fire_and_forget(coro: Coroutine[Any, Any, None]) -> None:
+    """Schedules `coro` without awaiting it.
+
+    Duplicated from `ooagent.adapters.data.datastore_plugin._fire_and_forget`
+    (same 10-line helper, kept local rather than cross-imported as a private
+    symbol between packages). Python has no implicit always-on event loop —
+    if one happens to be running we hand the coroutine to it as a background
+    task; otherwise we run it to completion synchronously so it is never
+    silently dropped.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(coro)
+    else:
+        loop.create_task(coro)
 
 
 @dataclass(frozen=True)
@@ -176,26 +195,24 @@ class OpenTelemetryPlugin(AbstractPlugin):
         self._provider: OtelTelemetryProvider | None = None
 
     # `IPlugin.on_register`/`on_dispose` are declared synchronous (-> None).
-    # This plugin deliberately overrides them as `async def`, mirroring the
-    # TS source (`plugins/opentelemetry/index.ts`), which relies on the
-    # TS `void`-return-type compatibility quirk to declare an async override
-    # of a sync interface method. NOTE: unlike a floating JS Promise (which
-    # still runs to completion even if the caller doesn't `await` it), an
-    # un-awaited Python coroutine never executes its body at all — so if
-    # `PluginRegistry`/`OOAgent.initialize()` ever calls `on_register`
-    # without `await`, this provider's `init()` silently never runs. See
-    # task-21 pre-cleanup report for a flagged follow-up on this call site.
-    async def on_register(self, agent: IAgent[Any, Any]) -> None:  # type: ignore[override]
+    # `OtelTelemetryProvider.init()`/`.shutdown()` are async (they lazy-import
+    # and configure the `opentelemetry` SDK). `OOAgent.initialize()` calls
+    # `plugin.on_register(self)` without `await` (it iterates a heterogeneous
+    # list of mostly-synchronous IPlugins), so these methods stay genuinely
+    # synchronous and hand the async init/shutdown work to `_fire_and_forget`,
+    # which schedules it as a background task on a running loop or runs it to
+    # completion via `asyncio.run` when no loop is active. This mirrors the
+    # `DataStorePlugin.on_register`/`on_dispose` pattern in
+    # `adapters/data/datastore_plugin.py`.
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         if self._opts.provider is not None:
             return  # injected externally
         self._provider = OtelTelemetryProvider(self._opts.service_name, self._opts.endpoint)
-        await self._provider.init()
+        _fire_and_forget(self._provider.init())
 
-    # See the `on_register` override above: same deliberate async-over-sync
-    # quirk carried over from the TS source.
-    async def on_dispose(self) -> None:  # type: ignore[override]
+    def on_dispose(self) -> None:
         if self._provider is not None:
-            await self._provider.shutdown()
+            _fire_and_forget(self._provider.shutdown())
         self._provider = None
 
     def contributes(self) -> PluginContributions:
