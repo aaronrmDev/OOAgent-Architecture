@@ -70,7 +70,13 @@ class _PiiPattern:
     replacement: str
 
 
-# PII patterns for masking (GDPR Art.25, LLM06)
+# PII patterns for masking (GDPR Art.25, LLM06). Order matters: the "phone"
+# regex is broad enough to match any 10+-digit run with optional separators,
+# including an unformatted 16-digit credit card number — so the specific
+# fixed-format "ssn"/"cc" patterns must run first, or a card number gets
+# masked but mislabeled as [PHONE_REDACTED] instead of [CC_REDACTED],
+# undermining PCI DSS audit-trail accuracy (no raw-PII leak either way, but
+# the label matters for compliance reporting).
 PII_PATTERNS: list[_PiiPattern] = [
     _PiiPattern(
         "email",
