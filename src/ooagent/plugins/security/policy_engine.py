@@ -78,11 +78,6 @@ PII_PATTERNS: list[_PiiPattern] = [
         "[EMAIL_REDACTED]",
     ),
     _PiiPattern(
-        "phone",
-        re.compile(r"\+?[0-9]{1,3}[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"),
-        "[PHONE_REDACTED]",
-    ),
-    _PiiPattern(
         "ssn",
         re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
         "[SSN_REDACTED]",
@@ -91,6 +86,11 @@ PII_PATTERNS: list[_PiiPattern] = [
         "cc",
         re.compile(r"\b(?:\d{4}[\s-]?){3}\d{4}\b"),
         "[CC_REDACTED]",
+    ),
+    _PiiPattern(
+        "phone",
+        re.compile(r"\+?[0-9]{1,3}[\s.-]?[0-9]{3}[\s.-]?[0-9]{4,}"),
+        "[PHONE_REDACTED]",
     ),
     _PiiPattern(
         "api_key",

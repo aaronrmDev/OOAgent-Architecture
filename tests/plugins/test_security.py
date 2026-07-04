@@ -38,6 +38,19 @@ def test_mask_pii_redacts_email() -> None:
     assert "[EMAIL_REDACTED]" in masked
 
 
+def test_mask_pii_labels_credit_card_correctly_not_as_phone() -> None:
+    masked = DefaultSecurityPolicy.mask_pii("card: 4111111111111111")
+    assert "[CC_REDACTED]" in masked
+    assert "[PHONE_REDACTED]" not in masked
+    assert "4111111111111111" not in masked
+
+
+def test_mask_pii_still_labels_real_phone_numbers_as_phone() -> None:
+    masked = DefaultSecurityPolicy.mask_pii("call me at 555-123-4567")
+    assert "[PHONE_REDACTED]" in masked
+    assert "555-123-4567" not in masked
+
+
 async def test_secure_tool_wrapper_blocks_flagged_input_without_calling_inner() -> None:
     calls = {"n": 0}
 
