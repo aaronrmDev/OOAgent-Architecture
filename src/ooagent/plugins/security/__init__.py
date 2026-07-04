@@ -1,6 +1,21 @@
 """plugins/security/__init__.py — SecurityPlugin.
 
-Wraps every ITool contributed by other plugins with the full security gate.
+Wraps ITool instances with the full security gate. There are two supported
+recipes for this — both require explicit consumer action, since
+`OOAgent.initialize()` registers each plugin's `contributes()` tools directly
+into its own `ToolRegistry` as it iterates plugins; there is no hook where
+`SecurityPlugin` automatically sees tools contributed by *other* plugins:
+
+  1. Construction-time wrapping — pass the tool instances you already hold
+     as `SecurityPluginOptions.tools_to_wrap`; `contributes()` returns them
+     pre-wrapped in `SecureToolWrapper`.
+
+  2. Post-initialize registry wrapping — construct your own `ToolRegistry`
+     instance and pass it to `OOAgent(tool_registry=...)`. Because the agent
+     stores that same instance, you hold a live reference to it. After
+     `await agent.initialize(config)` has populated it with every plugin's
+     contributed tools, call `security_plugin.wrap_registry(that_registry)`
+     to wrap all of them in place. See `wrap_registry()` below.
 
 Compliance coverage:
   OWASP LLM Top 10 (2025) — all 10 risks addressed
@@ -76,12 +91,16 @@ class SecurityPluginOptions:
     """Options accepted by :class:`SecurityPlugin`."""
 
     policy: dict[str, Any] | None = None
-    # Tool registry to wrap. If provided, SecurityPlugin wraps every registered
-    # tool with the security gate ON registration (mutating the registry).
-    # If omitted, use contributes() — all tools returned are wrapped.
+    # Reserved for a caller-held ToolRegistry reference; SecurityPlugin does
+    # not read this field itself. To wrap an externally-held registry, call
+    # `SecurityPlugin.wrap_registry(that_registry)` directly after
+    # `agent.initialize()` completes (see `wrap_registry()` below) — passing
+    # the registry here has no effect.
     tool_registry: IToolRegistryRuntime | None = None
-    # Tools to wrap, when not using contributes(). Populate before
-    # agent.initialize() to declare which tool instances to wrap.
+    # Tool instances to wrap via contributes(). Populate at construction
+    # time, before registering this plugin with the agent's PluginRegistry —
+    # contributes() (invoked during agent.initialize()) returns each of
+    # these pre-wrapped in a SecureToolWrapper.
     tools_to_wrap: list[ITool] = field(default_factory=list)
 
 
@@ -114,8 +133,11 @@ class SecurityPlugin(IPlugin):
     def wrap_registry(self, registry: IToolRegistryRuntime) -> None:
         """Wraps every tool currently in a ToolRegistry.
 
-        Call AFTER all other plugins have been registered and contributes()
-        called, but BEFORE agent.initialize().
+        Call AFTER `agent.initialize(config)` has completed — that is what
+        populates the registry with every other plugin's contributed tools
+        (see `OOAgent.initialize()` in core/agent.py). `registry` must be the
+        same `ToolRegistry` instance passed to `OOAgent(tool_registry=...)`,
+        so the wrapped tools this method registers are visible to the agent.
         """
         tools = registry.all()
         for tool in tools:

@@ -69,15 +69,15 @@ async def test_respond_runs_full_fsm_and_returns_artifact() -> None:
     await agent.dispose()
 
 
-async def test_dispose_is_idempotent_by_raising_on_second_call() -> None:
-    # Mirrors §17 CLAUDE.md's dispose-idempotency conformance requirement:
-    # a second dispose() must not corrupt state, even though (per
-    # core/lifecycle.ts) it raises LifecycleError rather than silently no-op-ing.
+async def test_dispose_is_idempotent_second_call_is_a_noop() -> None:
+    # §17 CLAUDE.md's dispose-idempotency conformance requirement: calling
+    # dispose() twice must not raise. The first call transitions the agent
+    # to disposed; the second call is a no-op given that state.
     agent = OOAgent(llm_client=_StubLLMClient())
     await agent.initialize(AgentConfig())
     await agent.dispose()
-    with pytest.raises(LifecycleError):
-        await agent.dispose()
+    await agent.dispose()  # must not raise
+    assert not agent.is_ready
 
 
 async def test_agent_id_is_generated_when_not_supplied() -> None:

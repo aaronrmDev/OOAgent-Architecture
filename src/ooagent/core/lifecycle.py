@@ -71,7 +71,16 @@ class LifecycleManager(ILifecycle):
         return "healthy"
 
     async def dispose(self) -> None:
-        """Graceful dispose — §6 CLAUDE.md."""
+        """Graceful dispose — §6 CLAUDE.md.
+
+        Idempotent per §17 CLAUDE.md conformance contract: a second call
+        (after a first successful dispose) is a no-op, not an error. This is
+        distinct from disposing an agent that was NEVER initialized, which
+        still raises — there is nothing to release and no successful
+        initialize() ever happened.
+        """
+        if self._disposed:
+            return
         if not self._ready:
             raise LifecycleError("Cannot dispose an uninitialized agent")
         await self._plugin_registry.dispose_all()
