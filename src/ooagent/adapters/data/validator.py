@@ -5,11 +5,16 @@ normalization, before every write. Validation failure = hard block.
 
 Full normalization rules enforced:
   1NF  — atomic values only, no arrays of arrays unless explicitly typed
-  2NF  — primary key uniqueness enforced by unique indexes
+  2NF  — primary key presence is required (NOT uniqueness — no adapter in
+         this package reads FieldDefinition.unique/indexed or IndexSpec.unique;
+         a real backend enforcing unique indexes must check that separately)
   3NF  — no transitive dependencies: validator enforces field-level constraints only
 
 Zero-defect guarantee: a record that passes validate() + normalize() is
-guaranteed to be type-safe, range-valid, and schema-compliant.
+guaranteed to be type-safe, range-valid, and schema-compliant — NOT
+guaranteed unique, since uniqueness enforcement is a backend-adapter
+responsibility this package does not implement (InMemoryDataStore.insert()
+silently overwrites on a duplicate id).
 """
 
 from __future__ import annotations
