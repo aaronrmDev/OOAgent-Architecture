@@ -36,9 +36,7 @@ async def test_execute_invalid_args_throws_tool_execution_error_for_calculator_t
 def test_to_vendor_spec_returns_valid_json_for_anthropic_vendor() -> None:
     spec = date_tool.to_vendor_spec("anthropic")
     payload = json.dumps(spec)
-    assert len(payload) > 0, (
-        "to_vendor_spec() must return a non-empty JSON-serializable object"
-    )
+    assert len(payload) > 0, "to_vendor_spec() must return a non-empty JSON-serializable object"
     assert isinstance(spec, dict), "to_vendor_spec() must return an object"
 
 

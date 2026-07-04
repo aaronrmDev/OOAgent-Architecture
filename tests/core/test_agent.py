@@ -20,7 +20,9 @@ from ooagent.core.registry import ContextRegistry
 class _StubLLMClient(ILLMClient):
     async def complete(self, request):
         return CompletionResponse(
-            content="hello world", stop_reason="end_turn", usage=TokenUsage(input_tokens=1, output_tokens=1)
+            content="hello world",
+            stop_reason="end_turn",
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
 
     async def stream(self, request):

@@ -24,9 +24,17 @@ from ooagent.core.protocols import ITool, OOAgentError
 DataStoreKind = Literal["sql", "nosql", "kv", "graph", "timeseries"]
 
 FieldType = Literal[
-    "string", "number", "boolean", "date",
-    "uuid", "email", "url", "json",
-    "enum", "array", "object",
+    "string",
+    "number",
+    "boolean",
+    "date",
+    "uuid",
+    "email",
+    "url",
+    "json",
+    "enum",
+    "array",
+    "object",
 ]
 
 SortOrder = Literal["asc", "desc"]
@@ -56,8 +64,8 @@ class FieldDefinition:
     max: float | None = None  # numeric/string max value/length
     pattern: str | None = None  # regex for string validation
     enum_values: list[str] | None = None  # valid values for 'enum' type
-    items: "FieldDefinition | None" = None  # element type for 'array'
-    properties: "dict[str, FieldDefinition] | None" = None  # for 'object'
+    items: FieldDefinition | None = None  # element type for 'array'
+    properties: dict[str, FieldDefinition] | None = None  # for 'object'
 
 
 @dataclass(frozen=True)
@@ -78,7 +86,16 @@ class CollectionSchema:
 # ── Query types ───────────────────────────────────────────────────────────────
 
 WhereOperator = Literal[
-    "=", "!=", "<", "<=", ">", ">=", "in", "not_in", "like", "exists",
+    "=",
+    "!=",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "in",
+    "not_in",
+    "like",
+    "exists",
 ]
 
 
@@ -253,9 +270,7 @@ class IDataStore(ABC):
     ) -> PagedResult[Record_]: ...
 
     @abstractmethod
-    async def find_one(
-        self, collection: str, where: list[WhereClause]
-    ) -> Record_ | None: ...
+    async def find_one(self, collection: str, where: list[WhereClause]) -> Record_ | None: ...
 
     @abstractmethod
     async def update(self, collection: str, id: str, patch: Record_) -> bool:
@@ -271,15 +286,11 @@ class IDataStore(ABC):
     async def delete(self, collection: str, id: str) -> bool: ...
 
     @abstractmethod
-    async def count(
-        self, collection: str, where: list[WhereClause] | None = None
-    ) -> int: ...
+    async def count(self, collection: str, where: list[WhereClause] | None = None) -> int: ...
 
     # Transactions
     @abstractmethod
-    async def begin_transaction(
-        self, isolation: IsolationLevel | None = None
-    ) -> ITransaction: ...
+    async def begin_transaction(self, isolation: IsolationLevel | None = None) -> ITransaction: ...
 
     # Bulk operations (zero-defect: all-or-nothing / skip, per `on_error`)
     @abstractmethod

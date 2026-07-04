@@ -20,9 +20,7 @@ from ooagent.plugins.security.protocols import ISecurityPolicy
 
 
 class SecureToolWrapper(ITool):
-    def __init__(
-        self, inner: ITool, policy: ISecurityPolicy, agent_id: str = "unknown"
-    ) -> None:
+    def __init__(self, inner: ITool, policy: ISecurityPolicy, agent_id: str = "unknown") -> None:
         self._inner = inner
         self._policy = policy
         self._agent_id = agent_id

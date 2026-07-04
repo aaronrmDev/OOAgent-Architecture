@@ -7,8 +7,8 @@ from ooagent.core.protocols import (
     ArtifactPolicy,
     IDomainContext,
     InputSpec,
-    ISolver,
     Invariant,
+    ISolver,
     PipelineStep,
     ProblemClass,
     Query,
@@ -31,11 +31,7 @@ class StubDomainContext(IDomainContext):
         return {Term(label="stub-term", definition="A test term", canonical=True)}
 
     def problem_classes(self) -> set[ProblemClass]:
-        return {
-            ProblemClass(
-                name="StubProblem", description="Stub problem class", solver="stub"
-            )
-        }
+        return {ProblemClass(name="StubProblem", description="Stub problem class", solver="stub")}
 
     def solvers(self) -> dict[str, ISolver]:
         return {}
@@ -94,9 +90,7 @@ def test_invariants_are_callable_without_throwing() -> None:
 
 def test_resolve_intent_returns_none_for_unrecognized_query() -> None:
     result = ctx.resolve_intent(null_query)
-    assert result is None, (
-        "resolve_intent must return None for unrecognized queries — not throw"
-    )
+    assert result is None, "resolve_intent must return None for unrecognized queries — not throw"
 
 
 def test_artifact_preferences_preferred_formats_is_non_empty() -> None:

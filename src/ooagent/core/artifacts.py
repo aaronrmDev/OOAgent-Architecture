@@ -29,9 +29,7 @@ class ArtifactFactory(IArtifactFactory):
     def register_builder(self, format: ArtifactFormat, builder: ArtifactBuilder) -> None:
         self._builders[format] = builder
 
-    def build(
-        self, solution: Solution, format: ArtifactFormat, policy: ArtifactPolicy
-    ) -> Artifact:
+    def build(self, solution: Solution, format: ArtifactFormat, policy: ArtifactPolicy) -> Artifact:
         builder = self._builders.get(format)
         content = builder(solution, policy) if builder else solution.content
         return Artifact(

@@ -14,7 +14,7 @@ class AbstractPlugin(IPlugin):
     here, mirroring the TS `abstract readonly pluginId: string`).
     """
 
-    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         """Called once by PluginRegistry.register() → OOAgent.initialize().
         Override to perform setup (register event listeners, open connections, etc.)."""
         return None

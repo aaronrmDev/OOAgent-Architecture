@@ -29,12 +29,8 @@ oversized_request = CompletionRequest(
 
 async def test_complete_valid_request_returns_a_completion_response() -> None:
     response = await client.complete(valid_request)
-    assert isinstance(response.content, str), (
-        "CompletionResponse.content must be a string"
-    )
-    assert len(response.stop_reason) > 0, (
-        "CompletionResponse.stop_reason must be non-empty"
-    )
+    assert isinstance(response.content, str), "CompletionResponse.content must be a string"
+    assert len(response.stop_reason) > 0, "CompletionResponse.stop_reason must be non-empty"
     assert response.usage.input_tokens >= 0, "usage.input_tokens must be >= 0"
     assert response.usage.output_tokens >= 0, "usage.output_tokens must be >= 0"
 
@@ -54,6 +50,4 @@ async def test_stream_yields_at_least_one_chunk_before_resolving() -> None:
 def test_model_id_and_max_tokens_are_exposed_on_the_client() -> None:
     assert len(client.model_id) > 0, "ILLMClient.model_id must be non-empty"
     assert client.max_tokens > 0, "ILLMClient.max_tokens must be > 0"
-    assert isinstance(client.supports_tools, bool), (
-        "supports_tools must be boolean"
-    )
+    assert isinstance(client.supports_tools, bool), "supports_tools must be boolean"

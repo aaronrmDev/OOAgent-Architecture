@@ -9,7 +9,6 @@ from ooagent.adapters.data.in_memory_store import InMemoryDataStore
 from ooagent.adapters.data.protocols import (
     CollectionSchema,
     FieldDefinition,
-    OrderBySpec,
     QueryOptions,
     SchemaValidationError,
     WhereClause,
@@ -74,9 +73,7 @@ async def test_bulk_insert_reports_inserted_count() -> None:
     store = InMemoryDataStore()
     await store.connect()
     await store.create_collection(SCHEMA)
-    result = await store.bulk_insert(
-        "users", [{"email": "a@b.com"}, {"email": "b@b.com"}]
-    )
+    result = await store.bulk_insert("users", [{"email": "a@b.com"}, {"email": "b@b.com"}])
     assert result["inserted"] == 2
     assert result["failed"] == 0
 

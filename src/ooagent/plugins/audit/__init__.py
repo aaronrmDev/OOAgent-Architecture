@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ooagent.core.protocols import (
@@ -57,7 +57,7 @@ class AuditPlugin(AbstractPlugin):
         self._agent_id = "<unregistered>"
         self._turn = 0
 
-    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         self._agent_id = agent.agent_id
 
     def on_dispose(self) -> None:
@@ -89,7 +89,7 @@ class AuditPlugin(AbstractPlugin):
                 format=artifact.format,
                 provenance_sources=[f"{p.source} [{p.tag}]" for p in provenance],
                 content_length=len(artifact.content),
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
 
             # Ring buffer — evict oldest on overflow
@@ -118,7 +118,7 @@ class AuditPlugin(AbstractPlugin):
         if inspect.isawaitable(result):
             task = asyncio.ensure_future(result)
 
-            def _log_if_failed(t: "asyncio.Task[Any]") -> None:
+            def _log_if_failed(t: asyncio.Task[Any]) -> None:
                 exc = t.exception() if not t.cancelled() else None
                 if exc is not None:
                     _logger.error("[AuditPlugin] Sink error: %s", exc)

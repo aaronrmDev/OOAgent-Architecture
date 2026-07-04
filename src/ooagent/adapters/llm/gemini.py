@@ -7,7 +7,7 @@ import json
 import math
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -64,10 +64,7 @@ class GeminiLLMClient(ILLMClient):
         if estimated > self.max_tokens:
             raise TokenLimitError(estimated, self.max_tokens)
 
-        url = (
-            f"{self._base_url}/v1beta/models/{self.model_id}:generateContent"
-            f"?key={self._api_key}"
-        )
+        url = f"{self._base_url}/v1beta/models/{self.model_id}:generateContent?key={self._api_key}"
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 url,
@@ -76,9 +73,7 @@ class GeminiLLMClient(ILLMClient):
             )
 
         if response.status_code >= 400:
-            raise RuntimeError(
-                f"Gemini API error: {response.status_code} {response.reason_phrase}"
-            )
+            raise RuntimeError(f"Gemini API error: {response.status_code} {response.reason_phrase}")
 
         return self._parse(response.json())
 
@@ -157,7 +152,9 @@ class GeminiLLMClient(ILLMClient):
         text = "".join(p.get("text", "") for p in parts)
 
         finish_reason = candidate.get("finishReason") if candidate else None
-        stop_reason = "max_tokens" if finish_reason == "MAX_TOKENS" else "end_turn"
+        stop_reason: Literal["end_turn", "max_tokens", "tool_use", "stop_sequence"] = (
+            "max_tokens" if finish_reason == "MAX_TOKENS" else "end_turn"
+        )
 
         usage_metadata = data.get("usageMetadata") or {}
         return CompletionResponse(

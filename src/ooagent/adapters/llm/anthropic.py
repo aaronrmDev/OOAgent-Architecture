@@ -7,7 +7,7 @@ import json
 import math
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -119,9 +119,7 @@ class AnthropicLLMClient(ILLMClient):
     def _build_body(self, request: CompletionRequest) -> dict[str, Any]:
         system = next((m.content for m in request.messages if m.role == "system"), None)
         messages = [
-            {"role": m.role, "content": m.content}
-            for m in request.messages
-            if m.role != "system"
+            {"role": m.role, "content": m.content} for m in request.messages if m.role != "system"
         ]
 
         body: dict[str, Any] = {
@@ -147,6 +145,7 @@ class AnthropicLLMClient(ILLMClient):
         tool_blocks = [b for b in content_blocks if b.get("type") == "tool_use"]
 
         stop_reason_raw = data.get("stop_reason")
+        stop_reason: Literal["end_turn", "max_tokens", "tool_use", "stop_sequence"]
         if stop_reason_raw == "tool_use":
             stop_reason = "tool_use"
         elif stop_reason_raw == "max_tokens":

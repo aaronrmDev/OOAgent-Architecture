@@ -19,6 +19,15 @@ from ooagent.core.protocols import ITelemetryProvider
 
 T = TypeVar("T")
 
+# Pre-declared as `Any` so the try/except below can bind either the real
+# module/class objects or `None` (optional-dependency pattern) without a
+# mypy assignment-type conflict between the two branches.
+_otel_trace: Any = None
+_otel_metrics: Any = None
+_OTelObservation: Any = None
+_OTelStatus: Any = None
+_OTelStatusCode: Any = None
+
 try:
     from opentelemetry import metrics as _otel_metrics
     from opentelemetry import trace as _otel_trace
@@ -26,11 +35,7 @@ try:
     from opentelemetry.trace import Status as _OTelStatus
     from opentelemetry.trace import StatusCode as _OTelStatusCode
 except ImportError:  # pragma: no cover - optional dependency not installed
-    _otel_trace = None
-    _otel_metrics = None
-    _OTelObservation = None
-    _OTelStatus = None
-    _OTelStatusCode = None
+    pass
 
 
 class OpenTelemetryProvider(ITelemetryProvider):

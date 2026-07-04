@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from ooagent.core.protocols import (
@@ -22,7 +24,7 @@ def test_agent_config_has_expected_defaults() -> None:
 
 def test_query_is_a_frozen_dataclass() -> None:
     q = Query(text="hello")
-    with pytest.raises(Exception):
+    with pytest.raises(FrozenInstanceError):
         q.text = "changed"  # type: ignore[misc]
 
 

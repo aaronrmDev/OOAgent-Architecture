@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from ooagent.core.registry import PluginRegistry
-
 from ooagent.plugins.audit import AuditEntry, AuditPlugin, AuditPluginOptions
 from ooagent.plugins.base_plugin import AbstractPlugin
 from ooagent.plugins.cache import CachePlugin, CachePluginOptions

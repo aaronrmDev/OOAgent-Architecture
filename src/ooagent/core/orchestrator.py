@@ -77,15 +77,11 @@ class MultiAgentOrchestrator(IOrchestrator):
     def bus(self) -> SignalBus:
         return self._bus
 
-    async def dispatch(
-        self, query: Query, contexts: list[IDomainContext]
-    ) -> list[Solution]:
-        return await asyncio.gather(
-            *(
-                self._semaphore.run(lambda ctx=ctx: self._run_specialist(query, ctx))
-                for ctx in contexts
-            )
-        )
+    async def dispatch(self, query: Query, contexts: list[IDomainContext]) -> list[Solution]:
+        def _make_task(ctx: IDomainContext) -> Callable[[], Awaitable[Solution]]:
+            return lambda: self._run_specialist(query, ctx)
+
+        return await asyncio.gather(*(self._semaphore.run(_make_task(ctx)) for ctx in contexts))
 
     async def synthesize(self, solutions: list[Solution], original: Query) -> Solution:
         """Default: concatenate. Override with a meta-agent LLM call when available."""

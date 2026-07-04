@@ -57,19 +57,31 @@ class OtelTelemetryProvider(ITelemetryProvider):
 
     async def init(self) -> None:
         try:
-            # Lazy import — keeps `opentelemetry` an optional peer dependency
-            from opentelemetry import metrics, trace  # type: ignore[import-not-found]
-            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
-                OTLPSpanExporter,
+            # Lazy import — keeps `opentelemetry` an optional peer dependency.
+            # `type: ignore[import-not-found, unused-ignore]` covers both cases:
+            # the package missing (error) and the package installed, e.g. via
+            # the `otel` extra (ignore would otherwise be flagged as unused).
+            from opentelemetry import (  # type: ignore[import-not-found, unused-ignore]
+                metrics,
+                trace,
             )
-            from opentelemetry.sdk.resources import Resource  # type: ignore[import-not-found]
-            from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
-            from opentelemetry.sdk.trace.export import (  # type: ignore[import-not-found]
-                BatchSpanProcessor,
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                OTLPSpanExporter,  # type: ignore[import-not-found, unused-ignore]
+            )
+            from opentelemetry.sdk.resources import (
+                Resource,  # type: ignore[import-not-found, unused-ignore]
+            )
+            from opentelemetry.sdk.trace import (
+                TracerProvider,  # type: ignore[import-not-found, unused-ignore]
+            )
+            from opentelemetry.sdk.trace.export import (
+                BatchSpanProcessor,  # type: ignore[import-not-found, unused-ignore]
             )
 
-            provider = TracerProvider(resource=Resource.create({"service.name": self._service_name}))
-            provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=self._endpoint)))
+            resource = Resource.create({"service.name": self._service_name})
+            provider = TracerProvider(resource=resource)
+            exporter = OTLPSpanExporter(endpoint=self._endpoint)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
             trace.set_tracer_provider(provider)
             self._sdk = provider
 
@@ -133,7 +145,10 @@ class OtelTelemetryProvider(ITelemetryProvider):
     @staticmethod
     def _set_status_ok(span: Any) -> None:
         try:
-            from opentelemetry.trace import Status, StatusCode  # type: ignore[import-not-found]
+            from opentelemetry.trace import (  # type: ignore[import-not-found, unused-ignore]
+                Status,
+                StatusCode,
+            )
 
             span.set_status(Status(StatusCode.OK))
         except Exception:
@@ -142,7 +157,10 @@ class OtelTelemetryProvider(ITelemetryProvider):
     @staticmethod
     def _set_status_error(span: Any, message: str) -> None:
         try:
-            from opentelemetry.trace import Status, StatusCode  # type: ignore[import-not-found]
+            from opentelemetry.trace import (  # type: ignore[import-not-found, unused-ignore]
+                Status,
+                StatusCode,
+            )
 
             span.set_status(Status(StatusCode.ERROR, message))
         except Exception:
@@ -157,13 +175,25 @@ class OpenTelemetryPlugin(AbstractPlugin):
         self._opts = opts or OtelPluginOptions()
         self._provider: OtelTelemetryProvider | None = None
 
-    async def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    # `IPlugin.on_register`/`on_dispose` are declared synchronous (-> None).
+    # This plugin deliberately overrides them as `async def`, mirroring the
+    # TS source (`plugins/opentelemetry/index.ts`), which relies on the
+    # TS `void`-return-type compatibility quirk to declare an async override
+    # of a sync interface method. NOTE: unlike a floating JS Promise (which
+    # still runs to completion even if the caller doesn't `await` it), an
+    # un-awaited Python coroutine never executes its body at all — so if
+    # `PluginRegistry`/`OOAgent.initialize()` ever calls `on_register`
+    # without `await`, this provider's `init()` silently never runs. See
+    # task-21 pre-cleanup report for a flagged follow-up on this call site.
+    async def on_register(self, agent: IAgent[Any, Any]) -> None:  # type: ignore[override]
         if self._opts.provider is not None:
             return  # injected externally
         self._provider = OtelTelemetryProvider(self._opts.service_name, self._opts.endpoint)
         await self._provider.init()
 
-    async def on_dispose(self) -> None:
+    # See the `on_register` override above: same deliberate async-over-sync
+    # quirk carried over from the TS source.
+    async def on_dispose(self) -> None:  # type: ignore[override]
         if self._provider is not None:
             await self._provider.shutdown()
         self._provider = None

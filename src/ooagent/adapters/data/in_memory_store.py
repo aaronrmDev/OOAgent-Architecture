@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import uuid
+from collections.abc import Callable
 from typing import Any, Literal
 
 from ooagent.adapters.data.protocols import (
@@ -17,7 +18,6 @@ from ooagent.adapters.data.protocols import (
     IDataStore,
     IsolationLevel,
     ITransaction,
-    OrderBySpec,
     PagedResult,
     QueryOptions,
     SortOrder,
@@ -29,7 +29,9 @@ from ooagent.adapters.data.protocols import (
 _MAX_SAFE_INTEGER = 2**53 - 1
 
 
-def _make_comparator(field: str, direction: SortOrder):
+def _make_comparator(
+    field: str, direction: SortOrder
+) -> Callable[[dict[str, Any], dict[str, Any]], int]:
     """Builds a JS-`Array.prototype.sort`-equivalent 2-arg comparator.
 
     Values that are not directly ordering-comparable (e.g. mixed types) are
@@ -41,9 +43,13 @@ def _make_comparator(field: str, direction: SortOrder):
         av = a.get(field)
         bv = b.get(field)
         try:
-            if av < bv:
+            # av/bv may be None or otherwise mutually non-comparable (e.g.
+            # str vs int); the surrounding try/except TypeError is the
+            # intentional guard for that (mirrors JS's permissive `<`/`>`,
+            # which never throws) — not a bug to fix here.
+            if av < bv:  # type: ignore[operator]
                 cmp = -1
-            elif av > bv:
+            elif av > bv:  # type: ignore[operator]
                 cmp = 1
             else:
                 cmp = 0
@@ -57,7 +63,7 @@ def _make_comparator(field: str, direction: SortOrder):
 class InMemoryTransaction(ITransaction):
     def __init__(
         self,
-        store: "InMemoryDataStore",
+        store: InMemoryDataStore,
         snapshots: dict[str, dict[str, dict[str, Any]]],
     ) -> None:
         self._active = True
@@ -166,18 +172,22 @@ class InMemoryDataStore(IDataStore):
             keys = options.select
             data = [{k: r.get(k) for k in keys} for r in page]
             return PagedResult(
-                data=data, total=total, limit=limit, offset=offset,
+                data=data,
+                total=total,
+                limit=limit,
+                offset=offset,
                 has_more=offset + limit < total,
             )
 
         return PagedResult(
-            data=page, total=total, limit=limit, offset=offset,
+            data=page,
+            total=total,
+            limit=limit,
+            offset=offset,
             has_more=offset + limit < total,
         )
 
-    async def find_one(
-        self, collection: str, where: list[WhereClause]
-    ) -> dict[str, Any] | None:
+    async def find_one(self, collection: str, where: list[WhereClause]) -> dict[str, Any] | None:
         result = await self.find(collection, QueryOptions(where=where, limit=1))
         return result.data[0] if result.data else None
 
@@ -192,10 +202,7 @@ class InMemoryDataStore(IDataStore):
     async def upsert(
         self, collection: str, record: dict[str, Any], match_fields: list[str]
     ) -> dict[str, Any]:
-        where = [
-            WhereClause(field=f, operator="=", value=record.get(f))
-            for f in match_fields
-        ]
+        where = [WhereClause(field=f, operator="=", value=record.get(f)) for f in match_fields]
         existing = await self.find_one(collection, where)
         if existing is not None:
             id_ = existing["id"]
@@ -208,21 +215,14 @@ class InMemoryDataStore(IDataStore):
         coll = self._get_collection(collection)
         return coll.pop(id, None) is not None
 
-    async def count(
-        self, collection: str, where: list[WhereClause] | None = None
-    ) -> int:
-        result = await self.find(
-            collection, QueryOptions(where=where, limit=_MAX_SAFE_INTEGER)
-        )
+    async def count(self, collection: str, where: list[WhereClause] | None = None) -> int:
+        result = await self.find(collection, QueryOptions(where=where, limit=_MAX_SAFE_INTEGER))
         return result.total
 
-    async def begin_transaction(
-        self, isolation: IsolationLevel | None = None
-    ) -> ITransaction:
+    async def begin_transaction(self, isolation: IsolationLevel | None = None) -> ITransaction:
         # Snapshot all collections for rollback.
         snapshots: dict[str, dict[str, dict[str, Any]]] = {
-            name: {k: {**v} for k, v in coll.items()}
-            for name, coll in self._collections.items()
+            name: {k: {**v} for k, v in coll.items()} for name, coll in self._collections.items()
         }
         return InMemoryTransaction(self, snapshots)
 
@@ -265,17 +265,17 @@ class InMemoryDataStore(IDataStore):
             value = clause.value
             op = clause.operator
             if op == "=":
-                return rv == value
+                return bool(rv == value)
             if op == "!=":
-                return rv != value
+                return bool(rv != value)
             if op == "<":
-                return rv < value
+                return bool(rv < value)
             if op == "<=":
-                return rv <= value
+                return bool(rv <= value)
             if op == ">":
-                return rv > value
+                return bool(rv > value)
             if op == ">=":
-                return rv >= value
+                return bool(rv >= value)
             if op == "in":
                 return isinstance(value, list) and rv in value
             if op == "not_in":

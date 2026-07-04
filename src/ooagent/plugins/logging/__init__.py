@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ooagent.core.protocols import (
@@ -53,7 +53,7 @@ class LoggingPlugin(AbstractPlugin):
         self._sink = opts.sink
         self._agent_id = "<unregistered>"
 
-    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         self._agent_id = agent.agent_id
         self._sink(f"{self._prefix} LoggingPlugin registered on agent {self._agent_id}")
 
@@ -69,7 +69,7 @@ class LoggingPlugin(AbstractPlugin):
         sink = self._sink
 
         def decorator(artifact: Artifact, provenance: list[ProvenanceRecord]) -> Artifact:
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(UTC).isoformat()
             sink(f"{prefix} [{timestamp}] turn complete — format={artifact.format}")
 
             if not include_provenance or len(provenance) == 0:

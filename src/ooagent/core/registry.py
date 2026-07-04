@@ -6,11 +6,18 @@ import logging
 from collections.abc import Callable
 
 from ooagent.core.protocols import (
+    AntiPattern,
     ArtifactPolicy,
     IDomainContext,
+    InputSpec,
+    Invariant,
     IPlugin,
+    ISolver,
     ITool,
+    PipelineStep,
+    ProblemClass,
     Query,
+    Term,
 )
 
 _logger = logging.getLogger("ooagent.registry")
@@ -29,25 +36,25 @@ def _create_inline_null_context() -> IDomainContext:
         def version(self) -> str:
             return "1.0"
 
-        def vocabulary(self):
+        def vocabulary(self) -> set[Term]:
             return set()
 
-        def problem_classes(self):
+        def problem_classes(self) -> set[ProblemClass]:
             return set()
 
-        def solvers(self):
+        def solvers(self) -> dict[str, ISolver]:
             return {}
 
-        def invariants(self):
+        def invariants(self) -> list[Invariant]:
             return []
 
-        def pipeline(self):
+        def pipeline(self) -> list[PipelineStep]:
             return []
 
-        def anti_patterns(self):
+        def anti_patterns(self) -> list[AntiPattern]:
             return []
 
-        def required_inputs(self, pc):
+        def required_inputs(self, pc: ProblemClass) -> list[InputSpec]:
             return []
 
         def artifact_preferences(self) -> ArtifactPolicy:
@@ -60,7 +67,7 @@ def _create_inline_null_context() -> IDomainContext:
         def system_prompt_extension(self) -> str:
             return "NullContext v1.0 is active. Do not make domain-specific claims."
 
-        def resolve_intent(self, query: Query):
+        def resolve_intent(self, query: Query) -> ProblemClass | None:
             return None
 
     return _InlineNullContext()
@@ -69,7 +76,7 @@ def _create_inline_null_context() -> IDomainContext:
 class ContextRegistry:
     """Singleton — single source of truth for active IDomainContext — §4 GoF."""
 
-    _instance: "ContextRegistry | None" = None
+    _instance: ContextRegistry | None = None
 
     def __init__(self) -> None:
         self._contexts: dict[str, IDomainContext] = {}
@@ -77,7 +84,7 @@ class ContextRegistry:
         self._threshold = 0.1
 
     @classmethod
-    def get_instance(cls) -> "ContextRegistry":
+    def get_instance(cls) -> ContextRegistry:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

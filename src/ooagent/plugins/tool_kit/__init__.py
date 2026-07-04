@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from ooagent.core.protocols import PluginContributions
+from ooagent.core.protocols import ITool, PluginContributions
 from ooagent.plugins.base_plugin import AbstractPlugin
 from ooagent.plugins.tool_kit.calculator_tool import CalculatorTool
 from ooagent.plugins.tool_kit.datetime_tool import DateTimeTool
@@ -26,9 +26,7 @@ __all__ = [
 
 @dataclass
 class ToolKitPluginOptions:
-    http_fetch: "HttpFetchToolOptions | Literal[False]" = field(
-        default_factory=HttpFetchToolOptions
-    )
+    http_fetch: HttpFetchToolOptions | Literal[False] = field(default_factory=HttpFetchToolOptions)
     datetime: bool = True
     calculator: bool = True
 
@@ -44,7 +42,7 @@ class ToolKitPlugin(AbstractPlugin):
         return None
 
     def contributes(self) -> PluginContributions:
-        tools = []
+        tools: list[ITool] = []
         if self._opts.datetime is not False:
             tools.append(DateTimeTool())
         if self._opts.calculator is not False:

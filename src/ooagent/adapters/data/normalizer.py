@@ -28,7 +28,9 @@ from ooagent.adapters.data.protocols import (
     NormalizationResult,
 )
 
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _URL_RE = re.compile(r"^https?://")
 
@@ -42,7 +44,7 @@ def _changed(original: Any, normalized: Any) -> bool:
     """
     if isinstance(original, bool) != isinstance(normalized, bool):
         return True
-    return original != normalized
+    return bool(original != normalized)
 
 
 class DefaultNormalizer(INormalizer[dict[str, Any]]):
@@ -64,7 +66,11 @@ class DefaultNormalizer(INormalizer[dict[str, Any]]):
             if original is None:
                 if field_def.default is not None:
                     normalized[field_name] = field_def.default
-                    changes.append(FieldChange(field=field_name, original=original, normalized=field_def.default))
+                    changes.append(
+                        FieldChange(
+                            field=field_name, original=original, normalized=field_def.default
+                        )
+                    )
                 # Required fields with no value are left absent — validator catches them.
                 continue
 
@@ -128,7 +134,9 @@ class DefaultNormalizer(INormalizer[dict[str, Any]]):
         if field_type == "url":
             s = str(value).strip()
             if not _URL_RE.match(s):
-                warnings.append(f"Field '{name}': '{s}' has no https?:// scheme — prepending https://")
+                warnings.append(
+                    f"Field '{name}': '{s}' has no https?:// scheme — prepending https://"
+                )
                 s = f"https://{s}"
             # Remove trailing slash for consistency.
             return re.sub(r"/$", "", s)
@@ -204,7 +212,7 @@ class DefaultNormalizer(INormalizer[dict[str, Any]]):
             return _to_iso(parsed)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             try:
-                parsed = dt.datetime.fromtimestamp(value / 1000, tz=dt.timezone.utc)
+                parsed = dt.datetime.fromtimestamp(value / 1000, tz=dt.UTC)
             except (OverflowError, OSError, ValueError):
                 warnings.append(f"Field '{name}': '{value}' is not a valid date — skipping")
                 return None
@@ -244,11 +252,11 @@ def _parse_date_string(value: str) -> dt.datetime | None:
         except ValueError:
             return None
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+        parsed = parsed.replace(tzinfo=dt.UTC)
     return parsed
 
 
 def _to_iso(value: dt.datetime) -> str:
     """Formats like JS `Date.prototype.toISOString()`: milliseconds, `Z` suffix, UTC."""
-    utc = value.astimezone(dt.timezone.utc)
+    utc = value.astimezone(dt.UTC)
     return utc.strftime("%Y-%m-%dT%H:%M:%S.") + f"{utc.microsecond // 1000:03d}Z"

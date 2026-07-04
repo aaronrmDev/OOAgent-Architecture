@@ -17,7 +17,13 @@ from ooagent.adapters.llm.caching_proxy import CachingLLMProxy
 from ooagent.adapters.llm.gemini import GeminiConfig, GeminiLLMClient
 from ooagent.adapters.llm.ollama import OllamaConfig, OllamaLLMClient
 from ooagent.adapters.llm.openai import OpenAIConfig, OpenAILLMClient
-from ooagent.core.protocols import CompletionRequest, CompletionResponse, Message, TokenLimitError, TokenUsage
+from ooagent.core.protocols import (
+    CompletionRequest,
+    CompletionResponse,
+    Message,
+    TokenLimitError,
+    TokenUsage,
+)
 
 
 def test_anthropic_client_exposes_vendor_and_defaults() -> None:
@@ -77,7 +83,9 @@ async def test_caching_proxy_caches_deterministic_completions() -> None:
             nonlocal call_count
             call_count += 1
             return CompletionResponse(
-                content="cached", stop_reason="end_turn", usage=TokenUsage(input_tokens=1, output_tokens=1)
+                content="cached",
+                stop_reason="end_turn",
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
             )
 
         async def stream(self, request):

@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any, Generic
 
 from ooagent.core.artifacts import ArtifactFactory, ProvenanceTracker, ResponseDecorator
@@ -22,6 +23,7 @@ from ooagent.core.protocols import (
     IDomainContext,
     ILLMClient,
     ISessionState,
+    ISolver,
     ITelemetryProvider,
     LifecycleError,
     Message,
@@ -29,8 +31,9 @@ from ooagent.core.protocols import (
     ScopeExitError,
     Solution,
     SourceRecord,
-    TQuery,
+    T,
     ToolCall,
+    TQuery,
     TResponse,
 )
 from ooagent.core.registry import ContextRegistry, PluginRegistry, ToolRegistry
@@ -42,7 +45,7 @@ _logger = logging.getLogger("ooagent.agent")
 class _SolverDispatcher:
     """Strategy: solver dispatch — selects ISolver per ProblemClass."""
 
-    def select(self, problem_class: str, context: IDomainContext):
+    def select(self, problem_class: str, context: IDomainContext) -> ISolver | None:
         return context.solvers().get(problem_class)
 
 
@@ -68,19 +71,19 @@ class LLMAgent(AbstractAgent[TQuery, TResponse], Generic[TQuery, TResponse]):
 class _NullTelemetry(ITelemetryProvider):
     """Null Object for telemetry — used when no provider is injected."""
 
-    async def span(self, name, fn):
+    async def span(self, name: str, fn: Callable[[], Awaitable[T]]) -> T:
         return await fn()
 
-    def counter(self, name, delta=1):
+    def counter(self, name: str, delta: float = 1) -> None:
         return None
 
-    def gauge(self, name, value):
+    def gauge(self, name: str, value: float) -> None:
         return None
 
-    def histogram(self, name, value):
+    def histogram(self, name: str, value: float) -> None:
         return None
 
-    def event(self, name, payload):
+    def event(self, name: str, payload: dict[str, Any]) -> None:
         return None
 
 
@@ -140,9 +143,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 for dec in contributions.decorators or []:
                     self._decorator.add_decorator(dec)
             except Exception:
-                _logger.exception(
-                    "[OOAgent] Plugin registration failed: %s", plugin.plugin_id
-                )
+                _logger.exception("[OOAgent] Plugin registration failed: %s", plugin.plugin_id)
 
     async def dispose(self) -> None:
         await self._lifecycle.dispose()
@@ -244,9 +245,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
             request = CompletionRequest(
                 messages=messages,
                 tools=(
-                    [t.to_vendor_spec(self._llm_client.vendor) for t in tools]
-                    if tools
-                    else None
+                    [t.to_vendor_spec(self._llm_client.vendor) for t in tools] if tools else None
                 ),
             )
 
@@ -267,9 +266,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
             return Solution(
                 content=response.content,
                 format=query.format or "text",
-                sources=[
-                    SourceRecord(tag=p.tag, ref=p.source) for p in self._provenance.dump()
-                ],
+                sources=[SourceRecord(tag=p.tag, ref=p.source) for p in self._provenance.dump()],
                 metadata={"extras": extras},
             )
 

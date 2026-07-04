@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from ooagent.core.protocols import Artifact, Query, ScopeExitError
+from ooagent.core.protocols import Artifact, Query, ScopeExitError, ToolExecutionError
 from ooagent.plugins.audit import AuditPlugin
 from ooagent.plugins.cache import CachePlugin
 from ooagent.plugins.logging import LoggingPlugin, LoggingPluginOptions
@@ -35,7 +35,9 @@ def test_audit_plugin_records_decorator_invocation_in_ring_buffer() -> None:
     plugin.on_register(_FakeAgent())
     contributions = plugin.contributes()
     decorator = contributions.decorators[0]
-    artifact = Artifact(content="hi", format="text", provenance=[], metadata={"contextName": "Engineering"})
+    artifact = Artifact(
+        content="hi", format="text", provenance=[], metadata={"contextName": "Engineering"}
+    )
     decorator(artifact, [])
     assert len(plugin.entries) == 1
     assert plugin.entries[0].context_name == "Engineering"
@@ -71,7 +73,7 @@ async def test_rate_limited_tool_blocks_after_max_calls() -> None:
     contributions = plugin.contributes()
     wrapped = contributions.tools[0]
     await wrapped.execute({"a": 1})
-    with pytest.raises(Exception):
+    with pytest.raises(ToolExecutionError):
         await wrapped.execute({"a": 2})
 
 

@@ -89,7 +89,7 @@ class HttpFetchTool(BaseTool):
         except Exception as err:
             raise ToolExecutionError(self.name, args, err) from err
 
-    async def _read_body(self, res: "httpx.Response") -> str:
+    async def _read_body(self, res: httpx.Response) -> str:
         chunks: list[bytes] = []
         total = 0
         async for chunk in res.aiter_bytes():

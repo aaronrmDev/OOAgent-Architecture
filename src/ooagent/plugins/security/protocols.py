@@ -53,7 +53,7 @@ class SecurityEvent:
     id: str
     timestamp: str  # ISO 8601 UTC
     severity: SecurityEventSeverity
-    risk: "OWASPLLMRisk | str"
+    risk: OWASPLLMRisk | str
     framework: ComplianceFramework
     message: str
     agent_id: str
@@ -101,7 +101,7 @@ class AuditPolicy:
     include_input: bool  # note: PII must be masked first
     include_output: bool
     retention_days: int  # GDPR / PCI DSS compliance
-    sink: "Callable[[SecurityEvent], Any] | None" = None
+    sink: Callable[[SecurityEvent], Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ class SecurityPolicy:
 class SecurityValidationResult:
     allowed: bool
     reason: str | None = None
-    risk: "OWASPLLMRisk | str | None" = None
+    risk: OWASPLLMRisk | str | None = None
 
 
 class ISecurityPolicy(ABC):
@@ -144,9 +144,7 @@ class ISecurityPolicy(ABC):
     def policy(self) -> SecurityPolicy: ...
 
     @abstractmethod
-    def validate_input(
-        self, input: dict[str, Any], tool_name: str
-    ) -> SecurityValidationResult:
+    def validate_input(self, input: dict[str, Any], tool_name: str) -> SecurityValidationResult:
         """Validates input before tool execution (LLM01, LLM04, GDPR Art.25)."""
 
     @abstractmethod
@@ -162,7 +160,7 @@ class ISecurityPolicy(ABC):
         self,
         *,
         severity: SecurityEventSeverity,
-        risk: "OWASPLLMRisk | str",
+        risk: OWASPLLMRisk | str,
         framework: ComplianceFramework,
         message: str,
         agent_id: str,

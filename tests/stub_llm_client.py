@@ -45,9 +45,7 @@ class StubLLMClient(ILLMClient):
         self._scripts: list[_ScriptEntry] = []
         self._call_count = 0
 
-    def add_script(
-        self, pattern: str | Pattern[str], response: dict[str, Any]
-    ) -> "StubLLMClient":
+    def add_script(self, pattern: str | Pattern[str], response: dict[str, Any]) -> StubLLMClient:
         """Fluent API for scripting responses."""
         self._scripts.append(_ScriptEntry(pattern, response))
         return self
@@ -74,9 +72,7 @@ class StubLLMClient(ILLMClient):
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         self._call_count += 1
-        estimated = math.ceil(
-            sum(len(m.content) for m in request.messages) / 4
-        )
+        estimated = math.ceil(sum(len(m.content) for m in request.messages) / 4)
         if estimated > self._max_tokens:
             raise TokenLimitError(estimated, self._max_tokens)
 

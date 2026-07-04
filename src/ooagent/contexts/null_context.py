@@ -10,8 +10,8 @@ from ooagent.core.protocols import (
     ArtifactPolicy,
     IDomainContext,
     InputSpec,
-    ISolver,
     Invariant,
+    ISolver,
     PipelineStep,
     ProblemClass,
     Query,
@@ -60,7 +60,8 @@ class NullContext(IDomainContext):
         return (
             "NullContext v1.0 is active. No domain context has been loaded. "
             "Do not make domain-specific claims. "
-            "If the user asks domain questions, state which context is active and what is unavailable."
+            "If the user asks domain questions, state which context is active "
+            "and what is unavailable."
         )
 
     def resolve_intent(self, query: Query) -> ProblemClass | None:

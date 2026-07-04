@@ -22,7 +22,7 @@ class ResponsePipeline:
     def __init__(self, base_steps: list[PipelineStep] | None = None) -> None:
         self._steps: list[PipelineStep] = list(base_steps or [])
 
-    def extend(self, context_steps: list[PipelineStep]) -> "ResponsePipeline":
+    def extend(self, context_steps: list[PipelineStep]) -> ResponsePipeline:
         return ResponsePipeline([*self._steps, *context_steps])
 
     async def run(self, query: Query, context: IDomainContext) -> dict[str, Any]:
@@ -43,10 +43,10 @@ class ConstraintEngine:
     Python has no private constructor; by convention, construct only via
     `get_instance()` (mirrors the TS private-constructor idiom)."""
 
-    _instance: "ConstraintEngine | None" = None
+    _instance: ConstraintEngine | None = None
 
     @classmethod
-    def get_instance(cls) -> "ConstraintEngine":
+    def get_instance(cls) -> ConstraintEngine:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance

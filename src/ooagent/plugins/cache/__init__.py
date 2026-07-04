@@ -103,7 +103,7 @@ class CachePlugin(AbstractPlugin):
         self._tools_to_cache: list[ITool] = []
         self._cached_tools: list[CachedTool] = []
 
-    def cache_tools(self, *tools: ITool) -> "CachePlugin":
+    def cache_tools(self, *tools: ITool) -> CachePlugin:
         """Declare which tools should have their results cached."""
         self._tools_to_cache = list(tools)
         return self

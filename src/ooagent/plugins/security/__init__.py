@@ -32,8 +32,8 @@ from ooagent.plugins.security.protocols import (
     AuditPolicy,
     BudgetPolicy,
     ComplianceFramework,
-    ISecurityPolicy,
     InputValidationPolicy,
+    ISecurityPolicy,
     OutputValidationPolicy,
     OWASPLLMRisk,
     RateLimitPolicy,
@@ -99,16 +99,15 @@ class SecurityPlugin(IPlugin):
     def security_policy(self) -> DefaultSecurityPolicy:
         return self._security_policy
 
-    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         self._agent_id = agent.agent_id
 
     def on_dispose(self) -> None:
         return None
 
     def contributes(self) -> PluginContributions:
-        wrapped = [
-            SecureToolWrapper(t, self._security_policy, self._agent_id)
-            for t in self._tools_to_wrap
+        wrapped: list[ITool] = [
+            SecureToolWrapper(t, self._security_policy, self._agent_id) for t in self._tools_to_wrap
         ]
         return PluginContributions(tools=wrapped)
 

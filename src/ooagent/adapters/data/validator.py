@@ -31,7 +31,9 @@ from ooagent.adapters.data.protocols import (
     ValidationResult,
 )
 
-_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
 _EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _URL_RE = re.compile(r"^https?://.+")
 
@@ -42,6 +44,11 @@ def _is_valid_date_string(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _err(field: str, message: str, value: Any) -> ValidationError:
+    """Build a ValidationError — a thin helper to keep call sites within line-length."""
+    return ValidationError(field=field, message=message, value=value)
 
 
 class DefaultSchemaValidator(ISchemaValidator):
@@ -56,7 +63,7 @@ class DefaultSchemaValidator(ISchemaValidator):
         pks = schema.primary_key if isinstance(schema.primary_key, list) else [schema.primary_key]
         for pk in pks:
             if record.get(pk) is None:
-                errors.append(ValidationError(field=pk, message=f"Primary key field '{pk}' is missing", value=record.get(pk)))
+                errors.append(_err(pk, f"Primary key field '{pk}' is missing", record.get(pk)))
 
         return ValidationResult(valid=len(errors) == 0, errors=errors)
 
@@ -65,7 +72,7 @@ class DefaultSchemaValidator(ISchemaValidator):
     ) -> None:
         # Required check.
         if definition.required and (value is None or value == ""):
-            errors.append(ValidationError(field=name, message=f"Field '{name}' is required", value=value))
+            errors.append(_err(name, f"Field '{name}' is required", value))
             return
 
         # Skip optional missing fields.
@@ -76,69 +83,67 @@ class DefaultSchemaValidator(ISchemaValidator):
 
         if field_type == "string":
             if not isinstance(value, str):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a string", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a string", value))
                 return
             if definition.min is not None and len(value) < definition.min:
-                errors.append(ValidationError(field=name, message=f"Field '{name}' min length is {definition.min}", value=value))
+                errors.append(_err(name, f"Field '{name}' min length is {definition.min}", value))
             if definition.max is not None and len(value) > definition.max:
-                errors.append(ValidationError(field=name, message=f"Field '{name}' max length is {definition.max}", value=value))
+                errors.append(_err(name, f"Field '{name}' max length is {definition.max}", value))
             if definition.pattern is not None and not re.search(definition.pattern, value):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' does not match pattern '{definition.pattern}'", value=value))
+                msg = f"Field '{name}' does not match pattern '{definition.pattern}'"
+                errors.append(_err(name, msg, value))
             return
 
         if field_type == "number":
             is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
             if not is_number or value != value or value in (float("inf"), float("-inf")):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a finite number", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a finite number", value))
                 return
             if definition.min is not None and value < definition.min:
-                errors.append(ValidationError(field=name, message=f"Field '{name}' minimum is {definition.min}", value=value))
+                errors.append(_err(name, f"Field '{name}' minimum is {definition.min}", value))
             if definition.max is not None and value > definition.max:
-                errors.append(ValidationError(field=name, message=f"Field '{name}' maximum is {definition.max}", value=value))
+                errors.append(_err(name, f"Field '{name}' maximum is {definition.max}", value))
             return
 
         if field_type == "boolean":
             if not isinstance(value, bool):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a boolean", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a boolean", value))
             return
 
         if field_type == "date":
             if not isinstance(value, str) or not _is_valid_date_string(value):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be an ISO 8601 date string", value=value))
+                errors.append(_err(name, f"Field '{name}' must be an ISO 8601 date string", value))
             return
 
         if field_type == "uuid":
             if not isinstance(value, str) or not _UUID_RE.match(value):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a valid UUID v4", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a valid UUID v4", value))
             return
 
         if field_type == "email":
             if not isinstance(value, str) or not _EMAIL_RE.match(value):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a valid email address", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a valid email address", value))
             return
 
         if field_type == "url":
             if not isinstance(value, str) or not _URL_RE.match(value):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a valid https?:// URL", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a valid https?:// URL", value))
             return
 
         if field_type == "enum":
             if definition.enum_values and str(value) not in definition.enum_values:
-                errors.append(ValidationError(
-                    field=name,
-                    message=f"Field '{name}' must be one of: {', '.join(definition.enum_values)}",
-                    value=value,
-                ))
+                joined = ", ".join(definition.enum_values)
+                errors.append(_err(name, f"Field '{name}' must be one of: {joined}", value))
             return
 
         if field_type == "array":
             if not isinstance(value, list):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be an array", value=value))
+                errors.append(_err(name, f"Field '{name}' must be an array", value))
                 return
             if definition.min is not None and len(value) < definition.min:
-                errors.append(ValidationError(field=name, message=f"Field '{name}' minimum {definition.min} items", value=value))
+                errors.append(_err(name, f"Field '{name}' minimum {definition.min} items", value))
             if definition.max is not None and len(value) > definition.max:
-                errors.append(ValidationError(field=name, message=f"Field '{name}' maximum {definition.max} items", value=value))
+                errors.append(_err(name, f"Field '{name}' maximum {definition.max} items", value))
             if definition.items:
                 for i, item in enumerate(value):
                     self._validate_field(f"{name}[{i}]", item, definition.items, errors)
@@ -146,7 +151,7 @@ class DefaultSchemaValidator(ISchemaValidator):
 
         if field_type == "object":
             if not isinstance(value, dict):
-                errors.append(ValidationError(field=name, message=f"Field '{name}' must be a plain object", value=value))
+                errors.append(_err(name, f"Field '{name}' must be a plain object", value))
                 return
             if definition.properties:
                 for k, prop_def in definition.properties.items():

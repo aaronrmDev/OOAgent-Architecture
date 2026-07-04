@@ -10,20 +10,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
 
-from ooagent.core.protocols import (
-    IAgent,
-    ITool,
-    JSONSchema,
-    LLMVendor,
-    PluginContributions,
-    VendorToolSpec,
-    IPlugin,
-)
-
+from ooagent.adapters.data.normalizer import DefaultNormalizer
 from ooagent.adapters.data.protocols import (
     CollectionSchema,
     DataStoreGuardError,
@@ -33,13 +24,21 @@ from ooagent.adapters.data.protocols import (
     SchemaValidationError,
     WhereClause,
 )
-from ooagent.adapters.data.normalizer import DefaultNormalizer
 from ooagent.adapters.data.validator import DefaultSchemaValidator
+from ooagent.core.protocols import (
+    IAgent,
+    IPlugin,
+    ITool,
+    JSONSchema,
+    LLMVendor,
+    PluginContributions,
+    VendorToolSpec,
+)
 
 _logger = logging.getLogger("ooagent.datastore_plugin")
 
 
-def _fire_and_forget(coro: Awaitable[None]) -> None:
+def _fire_and_forget(coro: Coroutine[Any, Any, None]) -> None:
     """Schedules `coro` without awaiting it.
 
     Mirrors the TS `.then()/.catch()` fire-and-forget pattern used in
@@ -87,7 +86,11 @@ class DataStoreTool(ITool):
         return await self._execute_fn(args)
 
     def to_vendor_spec(self, vendor: LLMVendor) -> VendorToolSpec:
-        return {"name": self.name, "description": self.description, "input_schema": self.input_schema()}
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema(),
+        }
 
 
 @dataclass(frozen=True)
@@ -130,7 +133,7 @@ class DataStorePlugin(IPlugin):
     def version(self) -> str:
         return "2026.06.01"
 
-    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         async def _connect() -> None:
             try:
                 await self._store.connect()
@@ -142,6 +145,7 @@ class DataStorePlugin(IPlugin):
 
     def on_dispose(self) -> None:
         if self._connected:
+
             async def _disconnect() -> None:
                 try:
                     await self._store.disconnect()
@@ -161,7 +165,9 @@ class DataStorePlugin(IPlugin):
 
     def _guard(self, collection: str) -> None:
         if not self._is_allowed(collection):
-            raise DataStoreGuardError(f"Collection '{collection}' is not in the allowedCollections list")
+            raise DataStoreGuardError(
+                f"Collection '{collection}' is not in the allowedCollections list"
+            )
         if not self._connected:
             raise DataStoreGuardError("DataStore is not connected")
 
@@ -172,7 +178,11 @@ class DataStorePlugin(IPlugin):
 
         result = self._normalizer.normalize(record, schema)
         if result.warnings:
-            _logger.warning("[DataStorePlugin] Normalization warnings for '%s': %s", collection, result.warnings)
+            _logger.warning(
+                "[DataStorePlugin] Normalization warnings for '%s': %s",
+                collection,
+                result.warnings,
+            )
 
         normalized = dict(result.normalized)
 
@@ -210,7 +220,8 @@ class DataStorePlugin(IPlugin):
 
         return DataStoreTool(
             "ds_insert",
-            "Insert a single record into a datastore collection. Validates and normalizes before writing.",
+            "Insert a single record into a datastore collection. "
+            "Validates and normalizes before writing.",
             lambda: {
                 "type": "object",
                 "properties": {
@@ -237,7 +248,8 @@ class DataStorePlugin(IPlugin):
 
         return DataStoreTool(
             "ds_find",
-            "Query records from a datastore collection with optional filtering, ordering, and pagination.",
+            "Query records from a datastore collection with optional filtering, "
+            "ordering, and pagination.",
             lambda: {
                 "type": "object",
                 "properties": {
@@ -250,7 +262,18 @@ class DataStorePlugin(IPlugin):
                                 "field": {"type": "string"},
                                 "operator": {
                                     "type": "string",
-                                    "enum": ["=", "!=", "<", "<=", ">", ">=", "in", "not_in", "like", "exists"],
+                                    "enum": [
+                                        "=",
+                                        "!=",
+                                        "<",
+                                        "<=",
+                                        ">",
+                                        ">=",
+                                        "in",
+                                        "not_in",
+                                        "like",
+                                        "exists",
+                                    ],
                                 },
                                 "value": {},
                             },
@@ -282,7 +305,9 @@ class DataStorePlugin(IPlugin):
             id_ = args["id"]
             self._guard(collection)
             record = await self._store.find_by_id(collection, id_)
-            return record if record is not None else {"error": f"Record '{id_}' not found in '{collection}'"}
+            if record is not None:
+                return record
+            return {"error": f"Record '{id_}' not found in '{collection}'"}
 
         return DataStoreTool(
             "ds_find_by_id",
@@ -306,7 +331,12 @@ class DataStorePlugin(IPlugin):
             patch = args["patch"]
             self._guard(collection)
             updated = await self._store.update(collection, id_, patch)
-            return {"id": id_, "collection": collection, "updated": updated, "status": "updated" if updated else "not_found"}
+            return {
+                "id": id_,
+                "collection": collection,
+                "updated": updated,
+                "status": "updated" if updated else "not_found",
+            }
 
         return DataStoreTool(
             "ds_update",
@@ -335,7 +365,8 @@ class DataStorePlugin(IPlugin):
 
         return DataStoreTool(
             "ds_upsert",
-            "Insert or update a record based on match fields. Normalizes and validates before writing.",
+            "Insert or update a record based on match fields. "
+            "Normalizes and validates before writing.",
             lambda: {
                 "type": "object",
                 "properties": {
@@ -359,7 +390,12 @@ class DataStorePlugin(IPlugin):
             id_ = args["id"]
             self._guard(collection)
             deleted = await self._store.delete(collection, id_)
-            return {"id": id_, "collection": collection, "deleted": deleted, "status": "deleted" if deleted else "not_found"}
+            return {
+                "id": id_,
+                "collection": collection,
+                "deleted": deleted,
+                "status": "deleted" if deleted else "not_found",
+            }
 
         return DataStoreTool(
             "ds_delete",

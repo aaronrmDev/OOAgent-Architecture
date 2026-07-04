@@ -7,7 +7,7 @@ import json
 import math
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -71,9 +71,7 @@ class OpenAILLMClient(ILLMClient):
             )
 
         if response.status_code >= 400:
-            raise RuntimeError(
-                f"OpenAI API error: {response.status_code} {response.reason_phrase}"
-            )
+            raise RuntimeError(f"OpenAI API error: {response.status_code} {response.reason_phrase}")
 
         return self._parse(response.json())
 
@@ -153,6 +151,7 @@ class OpenAILLMClient(ILLMClient):
             ]
 
         finish_reason = choice.get("finish_reason")
+        stop_reason: Literal["end_turn", "max_tokens", "tool_use", "stop_sequence"]
         if finish_reason == "tool_calls":
             stop_reason = "tool_use"
         elif finish_reason == "length":

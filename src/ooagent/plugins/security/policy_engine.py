@@ -20,7 +20,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ooagent.plugins.security.protocols import (
@@ -28,8 +28,8 @@ from ooagent.plugins.security.protocols import (
     AuditPolicy,
     BudgetPolicy,
     ComplianceFramework,
-    ISecurityPolicy,
     InputValidationPolicy,
+    ISecurityPolicy,
     OutputValidationPolicy,
     OWASPLLMRisk,
     RateLimitPolicy,
@@ -66,7 +66,7 @@ DEFAULT_INJECTION_PATTERNS: list[str] = [
 @dataclass(frozen=True)
 class _PiiPattern:
     name: str
-    pattern: "re.Pattern[str]"
+    pattern: re.Pattern[str]
     replacement: str
 
 
@@ -179,9 +179,7 @@ class DefaultSecurityPolicy(ISecurityPolicy):
         return self._policy
 
     # ── Input validation (LLM01, LLM04, LLM06, GDPR Art.25) ──────────────────
-    def validate_input(
-        self, input: dict[str, Any], tool_name: str
-    ) -> SecurityValidationResult:
+    def validate_input(self, input: dict[str, Any], tool_name: str) -> SecurityValidationResult:
         text = json.dumps(input)
 
         # LLM04: Input length limit (Model DoS)
@@ -211,8 +209,7 @@ class DefaultSecurityPolicy(ISecurityPolicy):
                     risk="LLM01_PROMPT_INJECTION",
                     framework="OWASP_LLM_TOP10",
                     message=(
-                        f"Prompt injection pattern detected in input to "
-                        f"'{tool_name}': '{pattern}'"
+                        f"Prompt injection pattern detected in input to '{tool_name}': '{pattern}'"
                     ),
                     agent_id="unknown",
                     tool_name=tool_name,
@@ -316,17 +313,12 @@ class DefaultSecurityPolicy(ISecurityPolicy):
             )
 
         # Least privilege: tool must be in allowedTools (NIST SP 800-207)
-        if (
-            self._policy.access.allowed_tools
-            and tool_name not in self._policy.access.allowed_tools
-        ):
+        if self._policy.access.allowed_tools and tool_name not in self._policy.access.allowed_tools:
             self.record(
                 severity="medium",
                 risk="LLM07_INSECURE_PLUGIN",
                 framework="OWASP_API_TOP10",
-                message=(
-                    f"Agent '{agent_id}' attempted to call unauthorized tool '{tool_name}'"
-                ),
+                message=(f"Agent '{agent_id}' attempted to call unauthorized tool '{tool_name}'"),
                 agent_id=agent_id,
                 tool_name=tool_name,
                 remediation=(
@@ -352,7 +344,7 @@ class DefaultSecurityPolicy(ISecurityPolicy):
         self,
         *,
         severity: SecurityEventSeverity,
-        risk: "OWASPLLMRisk | str",
+        risk: OWASPLLMRisk | str,
         framework: ComplianceFramework,
         message: str,
         agent_id: str,
@@ -362,7 +354,7 @@ class DefaultSecurityPolicy(ISecurityPolicy):
     ) -> None:
         full = SecurityEvent(
             id=str(uuid.uuid4()),
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             severity=severity,
             risk=risk,
             framework=framework,
@@ -390,7 +382,7 @@ class DefaultSecurityPolicy(ISecurityPolicy):
             _logger.error("[SECURITY %s] %s: %s", severity.upper(), risk, message)
 
     @staticmethod
-    def _invoke_sink(sink: "Any", event: SecurityEvent) -> None:
+    def _invoke_sink(sink: Any, event: SecurityEvent) -> None:
         try:
             result = sink(event)
         except Exception:

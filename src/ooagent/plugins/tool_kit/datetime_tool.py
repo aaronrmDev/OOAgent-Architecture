@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -36,6 +36,6 @@ class DateTimeTool(BaseTool):
             now = datetime.now(ZoneInfo(tz))
             return {"iso": now.strftime("%Y-%m-%dT%H:%M:%S") + "Z", "timezone": tz}
         except Exception:
-            now_utc = datetime.now(timezone.utc)
+            now_utc = datetime.now(UTC)
             iso = now_utc.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now_utc.microsecond // 1000:03d}Z"
             return {"iso": iso, "timezone": "UTC"}

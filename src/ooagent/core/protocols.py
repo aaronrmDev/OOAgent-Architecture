@@ -25,9 +25,7 @@ AgentFSMState = Literal[
     "DEGRADED",
 ]
 
-ArtifactFormat = Literal[
-    "py", "ts", "md", "json", "sql", "html", "yaml", "mermaid", "text"
-]
+ArtifactFormat = Literal["py", "ts", "md", "json", "sql", "html", "yaml", "mermaid", "text"]
 
 # ── Vocabulary & domain value objects ────────────────────────────────────────
 
@@ -92,9 +90,7 @@ class PipelineStep(Protocol):
 
     name: str
 
-    async def run(
-        self, query: "Query", context: "IDomainContext"
-    ) -> PipelineStepResult: ...
+    async def run(self, query: Query, context: IDomainContext) -> PipelineStepResult: ...
 
 
 # ── LLM wire types ────────────────────────────────────────────────────────────
@@ -248,9 +244,9 @@ ResponseDecoratorFn = Callable[["Artifact", list[ProvenanceRecord]], "Artifact"]
 
 @dataclass(frozen=True)
 class PluginContributions:
-    tools: list["ITool"] | None = None
-    contexts: list["IDomainContext"] | None = None
-    solvers: list["ISolver"] | None = None
+    tools: list[ITool] | None = None
+    contexts: list[IDomainContext] | None = None
+    solvers: list[ISolver] | None = None
     decorators: list[ResponseDecoratorFn] | None = None
 
 
@@ -265,15 +261,15 @@ T = TypeVar("T")
 
 class IVisitor(ABC, Generic[T]):
     @abstractmethod
-    def visit(self, node: "IArtifactNode") -> T: ...
+    def visit(self, node: IArtifactNode) -> T: ...
 
 
 class IArtifactNode(ABC):
     @abstractmethod
-    def accept(self, visitor: "IVisitor[T]") -> T: ...
+    def accept(self, visitor: IVisitor[T]) -> T: ...
 
     @abstractmethod
-    def children(self) -> list["IArtifactNode"]: ...
+    def children(self) -> list[IArtifactNode]: ...
 
 
 class IPrototypable(ABC, Generic[T]):
@@ -290,9 +286,7 @@ class OOAgentError(Exception):
 
 
 class ConstraintViolationError(OOAgentError):
-    def __init__(
-        self, invariant_name: str, offending_value: Any, inputs: dict[str, Any]
-    ) -> None:
+    def __init__(self, invariant_name: str, offending_value: Any, inputs: dict[str, Any]) -> None:
         super().__init__(f"Invariant violated: {invariant_name}")
         self.invariant_name = invariant_name
         self.offending_value = offending_value
@@ -300,9 +294,7 @@ class ConstraintViolationError(OOAgentError):
 
 
 class FSMViolationError(OOAgentError):
-    def __init__(
-        self, from_state: AgentFSMState, to_state: AgentFSMState, trace: FSMTrace
-    ) -> None:
+    def __init__(self, from_state: AgentFSMState, to_state: AgentFSMState, trace: FSMTrace) -> None:
         super().__init__(f"Illegal FSM transition: {from_state} → {to_state}")
         self.from_state = from_state
         self.to_state = to_state
@@ -355,7 +347,7 @@ class IAgent(ABC, Generic[TQuery, TResponse]):
 
     @property
     @abstractmethod
-    def state(self) -> "ISessionState": ...
+    def state(self) -> ISessionState: ...
 
 
 class ILLMClient(ABC):
@@ -398,7 +390,7 @@ class IDomainContext(ABC):
     def problem_classes(self) -> set[ProblemClass]: ...
 
     @abstractmethod
-    def solvers(self) -> dict[str, "ISolver"]: ...
+    def solvers(self) -> dict[str, ISolver]: ...
 
     @abstractmethod
     def invariants(self) -> list[Invariant]: ...
@@ -459,7 +451,7 @@ class IPlugin(ABC):
     def version(self) -> str: ...
 
     @abstractmethod
-    def on_register(self, agent: "IAgent[Any, Any]") -> None: ...
+    def on_register(self, agent: IAgent[Any, Any]) -> None: ...
 
     @abstractmethod
     def on_dispose(self) -> None: ...
@@ -560,14 +552,10 @@ class IArtifactFactory(ABC):
 
 class IOrchestrator(ABC):
     @abstractmethod
-    async def dispatch(
-        self, query: Query, contexts: list[IDomainContext]
-    ) -> list[Solution]: ...
+    async def dispatch(self, query: Query, contexts: list[IDomainContext]) -> list[Solution]: ...
 
     @abstractmethod
-    async def synthesize(
-        self, solutions: list[Solution], original: Query
-    ) -> Solution: ...
+    async def synthesize(self, solutions: list[Solution], original: Query) -> Solution: ...
 
 
 # ── Composition interfaces ─────────────────────────────────────────────────────

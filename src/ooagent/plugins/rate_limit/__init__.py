@@ -85,20 +85,20 @@ class RateLimitPlugin(AbstractPlugin):
         self._window_ms = opts.window_ms
         self._tools_to_wrap: list[ITool] = []
 
-    def wrap_tools(self, *tools: ITool) -> "RateLimitPlugin":
+    def wrap_tools(self, *tools: ITool) -> RateLimitPlugin:
         """Call before initialize() to declare which tools to wrap.
         If no tools are provided, no wrapping occurs at contributes() time."""
         self._tools_to_wrap = list(tools)
         return self
 
-    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+    def on_register(self, agent: IAgent[Any, Any]) -> None:
         return None
 
     def on_dispose(self) -> None:
         self._tools_to_wrap = []
 
     def contributes(self) -> PluginContributions:
-        wrapped = [
+        wrapped: list[ITool] = [
             RateLimitedTool(t, self._max_calls, self._window_ms) for t in self._tools_to_wrap
         ]
         return PluginContributions(tools=wrapped)

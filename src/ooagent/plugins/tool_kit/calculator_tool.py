@@ -7,7 +7,7 @@ never eval() or exec() to avoid injection.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, cast
 
 from ooagent.adapters.tools.base import BaseTool
 from ooagent.core.protocols import JSONSchema, ToolExecutionError
@@ -86,7 +86,13 @@ def _safe_eval(expr: str) -> float:
         base = parse_primary()
         if peek() == "**":
             consume()
-            return base ** parse_exponent_unary()
+            # float.__pow__ is typed to return `Any` (base ** exponent can be
+            # complex for a negative base with a fractional exponent); cast to
+            # match this function's declared float return type. NOTE: this is
+            # a pre-existing runtime divergence from the TS source (JS
+            # `Math.pow` yields NaN in that case, Python yields a complex
+            # number) — not something this type-only pass changes.
+            return cast(float, base ** parse_exponent_unary())
         return base
 
     def parse_exponent_unary() -> float:

@@ -40,7 +40,9 @@ class _StubContext(IDomainContext):
         return []
 
     def artifact_preferences(self) -> ArtifactPolicy:
-        return ArtifactPolicy(preferred_formats=["text"], type_hints_required=False, comment_policy="none")
+        return ArtifactPolicy(
+            preferred_formats=["text"], type_hints_required=False, comment_policy="none"
+        )
 
     def system_prompt_extension(self) -> str:
         return f"{self._name} active"

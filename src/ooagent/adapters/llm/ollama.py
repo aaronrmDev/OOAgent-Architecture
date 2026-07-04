@@ -6,7 +6,7 @@ import codecs
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -63,9 +63,7 @@ class OllamaLLMClient(ILLMClient):
             )
 
         if response.status_code >= 400:
-            raise RuntimeError(
-                f"Ollama API error: {response.status_code} {response.reason_phrase}"
-            )
+            raise RuntimeError(f"Ollama API error: {response.status_code} {response.reason_phrase}")
 
         return self._parse(response.json())
 
@@ -121,7 +119,9 @@ class OllamaLLMClient(ILLMClient):
         message = choice.get("message", {})
 
         finish_reason = choice.get("finish_reason")
-        stop_reason = "max_tokens" if finish_reason == "length" else "end_turn"
+        stop_reason: Literal["end_turn", "max_tokens", "tool_use", "stop_sequence"] = (
+            "max_tokens" if finish_reason == "length" else "end_turn"
+        )
 
         usage = data.get("usage") or {}
         return CompletionResponse(
