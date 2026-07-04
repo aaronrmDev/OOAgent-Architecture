@@ -71,7 +71,7 @@ jobs:
       - name: Check new plugins for required IPlugin interface
         run: |
           FAILURES=0
-          NEW_PLUGIN_FILES=$(git diff origin/develop...HEAD --name-only | grep "^src/ooagent/plugins/" | grep "__init__.py" || true)
+          NEW_PLUGIN_FILES=$(git diff origin/develop...HEAD --name-only | grep -E "^src/ooagent/plugins/[^/]+/__init__\.py$" || true)
 
           for plugin_file in $NEW_PLUGIN_FILES; do
             if [[ -f "$plugin_file" ]]; then
