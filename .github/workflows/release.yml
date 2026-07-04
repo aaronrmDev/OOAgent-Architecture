@@ -5,7 +5,7 @@ name: Release
 #
 # Gitflow release process:
 #   1. Cut branch: git checkout -b release/2026.06.02 develop
-#   2. Update version in package.json to YYYY.MM.NN
+#   2. Update version in pyproject.toml to YYYY.MM.NN
 #   3. Push → this workflow runs
 #   4. On merge to master → tag is created automatically
 
@@ -16,8 +16,8 @@ on:
     branches: [master]
     types: [closed]
 
-env:
-  NODE_VERSION: '22'
+# Python version is pinned via .python-version (3.11); uv resolves it
+# automatically for every `uv sync` / `uv run` invocation below.
 
 jobs:
   # ── Version Validation ────────────────────────────────────────────────────
@@ -28,28 +28,26 @@ jobs:
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+      - uses: astral-sh/setup-uv@v3
 
       - name: Validate version format
-        run: bash scripts/version-check.sh
+        run: uv run bash scripts/version-check.sh
 
       - name: Validate branch name matches version
         if: startsWith(github.ref, 'refs/heads/release/')
         run: |
           BRANCH="${{ github.ref_name }}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
+          PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           BRANCH_VERSION="${BRANCH#release/}"
 
           if [[ "$BRANCH_VERSION" != "$PKG_VERSION" ]]; then
-            echo "❌ Branch name '$BRANCH' version '$BRANCH_VERSION' does not match package.json '$PKG_VERSION'"
+            echo "❌ Branch name '$BRANCH' version '$BRANCH_VERSION' does not match pyproject.toml '$PKG_VERSION'"
             exit 1
           fi
-          echo "✅ Branch version matches package.json: $PKG_VERSION"
+          echo "✅ Branch version matches pyproject.toml: $PKG_VERSION"
 
       - id: get_version
-        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")" >> "$GITHUB_OUTPUT"
 
   # ── Full Release Suite ────────────────────────────────────────────────────
   full-suite:
@@ -58,52 +56,44 @@ jobs:
     needs: validate-version
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - uses: astral-sh/setup-uv@v3
 
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm run build
+      - run: uv sync --extra dev --extra otel
+      - run: uv run mypy --strict
+      - run: uv run ruff check
+      - run: uv run ruff format --check
+      - run: uv build
 
       - name: AI Safety Gate (MANDATORY for release)
-        run: bash scripts/ai-safety-gate.sh --verbose
+        run: uv run bash scripts/ai-safety-gate.sh --verbose
 
       - name: SDD Conformance (MANDATORY for release)
-        run: bash scripts/conformance-check.sh
+        run: uv run bash scripts/conformance-check.sh
 
       - name: Full test suite
-        run: npm test -- --passWithNoTests
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
+        run: PYTHONPATH=src uv run pytest tests/ -v
 
-      - name: Dependency audit (no HIGH/CRITICAL)
-        run: npm audit --audit-level=high
+      - name: Dependency audit (known vulnerabilities)
+        run: uv run --with pip-audit pip-audit
 
   # ── Release Artifact Build ────────────────────────────────────────────────
   build-release:
     name: Build Release Artifact
     runs-on: ubuntu-latest
-    needs: full-suite
+    needs: [validate-version, full-suite]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - uses: astral-sh/setup-uv@v3
 
-      - run: npm ci
-      - run: npm run build
+      - run: uv sync --extra dev --extra otel
+      - name: Build sdist + wheel
+        run: uv build
 
-      - name: Pack npm tarball
-        run: npm pack
-
-      - name: Upload release tarball
+      - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ooagent-${{ needs.validate-version.outputs.version }}
-          path: ooagent-*.tgz
+          path: dist/*
           retention-days: 90
 
   # ── Create GitHub Release (on merge to master) ────────────────────────────
@@ -119,10 +109,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download release tarball
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
           name: ooagent-${{ needs.validate-version.outputs.version }}
+          path: dist/
 
       - name: Create git tag
         run: |
@@ -151,12 +142,14 @@ jobs:
           \`\`\`
 
           ### AI Safety Gate
-          All 10 AI disaster prevention guards passed before this release was cut.
+          All AI disaster prevention guards passed before this release was cut.
           See \`scripts/ai-safety-gate.sh\` for details on each guard.
 
           ### Installation
           \`\`\`bash
-          npm install ooagent@${VERSION}
+          pip install ooagent==${VERSION}
+          # or
+          uv add ooagent==${VERSION}
           \`\`\`
           EOF
 
@@ -166,7 +159,7 @@ jobs:
           tag_name: v${{ needs.validate-version.outputs.version }}
           name: OOAgent v${{ needs.validate-version.outputs.version }}
           body_path: release-notes.md
-          files: ooagent-*.tgz
+          files: dist/*
           draft: false
           prerelease: false
         env:
@@ -183,12 +176,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          registry-url: 'https://registry.npmjs.org'
-      - run: npm ci
-      - run: npm run build
-      - run: npm publish --access public
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --extra dev --extra otel
+      - run: uv build
+      - run: uv publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
