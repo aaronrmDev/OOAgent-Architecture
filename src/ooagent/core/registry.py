@@ -6,7 +6,6 @@ import logging
 from collections.abc import Callable
 
 from ooagent.core.protocols import (
-    ArtifactFormat,
     ArtifactPolicy,
     IDomainContext,
     IPlugin,
