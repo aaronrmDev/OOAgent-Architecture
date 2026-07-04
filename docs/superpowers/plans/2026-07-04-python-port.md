@@ -9098,7 +9098,7 @@ def test_name_and_description_are_non_empty_strings() -> None:
 - [ ] **Step 8: Run the full conformance suite**
 
 Run: `PYTHONPATH=src python -m pytest tests/conformance/ -v`
-Expected: `5 skipped, 14 passed` (5 TODO-stubbed agent tests + 5 context + 4 llm_client + 5 tool)
+Expected: `5 skipped, 15 passed` (5 TODO-stubbed agent tests + 5 context + 4 llm_client + 6 tool)
 
 - [ ] **Step 9: Run the entire test suite (all tasks) as a final sanity check**
 
