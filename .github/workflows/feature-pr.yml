@@ -2,19 +2,16 @@ name: Feature PR Gate
 
 # Runs on pull requests targeting develop.
 # Enforces Spec Driven Development: no interface change without a conformance
-# test. Detects protocol drift in core/protocols.ts.
+# test. Detects protocol drift in src/ooagent/core/protocols.py.
 
 on:
   pull_request:
     branches: [develop]
     types: [opened, synchronize, reopened]
 
-env:
-  NODE_VERSION: '22'
-
 jobs:
   # ── SDD Protocol Drift Detection ──────────────────────────────────────────
-  # If core/protocols.ts changed, ensure:
+  # If src/ooagent/core/protocols.py changed, ensure:
   #   a) The change is additive (minor bump) or breaking (major bump)
   #   b) CLAUDE.md §18 versioning rules are followed
   protocol-drift:
@@ -25,41 +22,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for core/protocols.ts changes
+      - name: Check for src/ooagent/core/protocols.py changes
         id: proto_changed
         run: |
-          if git diff origin/develop...HEAD -- core/protocols.ts | grep -q .; then
+          if git diff origin/develop...HEAD -- src/ooagent/core/protocols.py | grep -q .; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "⚠️  core/protocols.ts has changed — checking for conformance tests..."
+            echo "⚠️  src/ooagent/core/protocols.py has changed — checking for conformance tests..."
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "✅ core/protocols.ts unchanged"
+            echo "✅ src/ooagent/core/protocols.py unchanged"
           fi
 
       - name: Verify conformance tests updated with protocol changes
         if: steps.proto_changed.outputs.changed == 'true'
         run: |
-          TESTING_CHANGED=$(git diff origin/develop...HEAD -- testing/ | grep -c "^+" || echo "0")
-          if [[ "$TESTING_CHANGED" -lt 5 ]]; then
-            echo "❌ core/protocols.ts changed but testing/ has fewer than 5 new lines."
+          TESTS_CHANGED=$(git diff origin/develop...HEAD -- tests/ | grep -c "^+" || echo "0")
+          if [[ "$TESTS_CHANGED" -lt 5 ]]; then
+            echo "❌ src/ooagent/core/protocols.py changed but tests/ has fewer than 5 new lines."
             echo "   Every interface change requires updated conformance tests (§17 CLAUDE.md)."
             exit 1
           fi
-          echo "✅ testing/ updated alongside protocol changes ($TESTING_CHANGED new lines)"
+          echo "✅ tests/ updated alongside protocol changes ($TESTS_CHANGED new lines)"
 
       - name: Check version bump for breaking changes
         if: steps.proto_changed.outputs.changed == 'true'
         run: |
-          # Detect removed exports (breaking change) → requires major version bump
-          REMOVED=$(git diff origin/develop...HEAD -- core/protocols.ts | grep "^-export" | wc -l)
+          # Detect removed public class/function definitions (breaking change)
+          # → requires major version bump. Python has no `export` keyword, so
+          # a removed top-level `class ` or `def ` in protocols.py is the
+          # equivalent signal to the TS-era `^-export` check.
+          REMOVED=$(git diff origin/develop...HEAD -- src/ooagent/core/protocols.py | grep -cE "^-(class |def )" || echo "0")
           if [[ "$REMOVED" -gt 0 ]]; then
-            echo "⚠️  $REMOVED export(s) removed from core/protocols.ts — this is a breaking change."
+            echo "⚠️  $REMOVED definition(s) removed from src/ooagent/core/protocols.py — this is a breaking change."
             echo "   Per §18 CLAUDE.md: breaking interface changes require a major version bump."
-            echo "   Current package.json version must increment the year or month component."
+            echo "   Current pyproject.toml version must increment the year or month component."
           fi
 
   # ── Plugin Contribution Verification ──────────────────────────────────────
-  # Every new plugin added in this PR must declare contributes() and onDispose()
+  # Every new plugin added in this PR must declare contributes() and on_dispose()
   plugin-contributions:
     name: Plugin Contribution Verification
     runs-on: ubuntu-latest
@@ -71,23 +71,23 @@ jobs:
       - name: Check new plugins for required IPlugin interface
         run: |
           FAILURES=0
-          NEW_PLUGIN_FILES=$(git diff origin/develop...HEAD --name-only | grep "^plugins/" | grep "index.ts" || true)
+          NEW_PLUGIN_FILES=$(git diff origin/develop...HEAD --name-only | grep "^src/ooagent/plugins/" | grep "__init__.py" || true)
 
           for plugin_file in $NEW_PLUGIN_FILES; do
             if [[ -f "$plugin_file" ]]; then
-              if ! grep -q "contributes()" "$plugin_file"; then
+              if ! grep -q "def contributes" "$plugin_file"; then
                 echo "❌ $plugin_file is missing contributes() — required by IPlugin interface"
                 FAILURES=$((FAILURES + 1))
               fi
-              if ! grep -q "onDispose()" "$plugin_file"; then
-                echo "❌ $plugin_file is missing onDispose() — required by IPlugin interface"
+              if ! grep -q "def on_dispose" "$plugin_file"; then
+                echo "❌ $plugin_file is missing on_dispose() — required by IPlugin interface"
                 FAILURES=$((FAILURES + 1))
               fi
-              if ! grep -q "readonly pluginId" "$plugin_file"; then
-                echo "❌ $plugin_file is missing pluginId — required by IPlugin interface"
+              if ! grep -q "plugin_id" "$plugin_file"; then
+                echo "❌ $plugin_file is missing plugin_id — required by IPlugin interface"
                 FAILURES=$((FAILURES + 1))
               fi
-              if ! grep -q "readonly version" "$plugin_file"; then
+              if ! grep -q "version" "$plugin_file"; then
                 echo "❌ $plugin_file is missing version — required by IPlugin interface"
                 FAILURES=$((FAILURES + 1))
               fi
@@ -113,7 +113,7 @@ jobs:
         run: |
           FAILURES=0
           NEW_CONTEXT_DIRS=$(git diff origin/develop...HEAD --name-only \
-            | grep "^contexts/" | grep -v "null_context\|index\.ts" \
+            | grep "^src/ooagent/contexts/" | grep -v "null_context\.py\|__init__\.py" \
             | sed 's|/[^/]*$||' | sort -u || true)
 
           for ctx_dir in $NEW_CONTEXT_DIRS; do

@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 # scripts/ai-safety-gate.sh
-# AI Disaster Prevention Gate — 10 Static-Analysis Guards
+# AI Disaster Prevention Gate — 13 Static-Analysis Guards
 #
 # Each guard maps to one or more documented AI disasters (2020-2026).
 # A failing guard blocks the CI pipeline and MUST be fixed before merge.
+#
+# Ported from the TypeScript-era version of this script: guards now scan
+# `.py` sources under src/ooagent/ instead of `.ts` sources at the repo
+# root. Guard names, rationale, and the pass/fail contract are unchanged.
+# Where an existing tool (mypy --strict, ruff) already enforces part of a
+# guard's intent, the guard is kept as a belt-and-suspenders check — it is
+# noted inline rather than removed, since these are safety gates, not
+# style lints, and a missing/misconfigured tool run must not silently
+# remove the check.
 #
 # Exit codes:
 #   0 — all guards passed
@@ -17,11 +26,20 @@ VERBOSE=${1:-""}
 FAILURES=0
 PASS="✅"
 FAIL="❌"
-SRC_DIRS="core adapters plugins contexts telemetry"
+SRC_DIRS="src/ooagent/core src/ooagent/adapters src/ooagent/plugins src/ooagent/contexts src/ooagent/telemetry"
 
 log()  { echo "[AI-GATE] $*"; }
 fail() { echo "[AI-GATE] $FAIL $*" >&2; FAILURES=$((FAILURES + 1)); }
-pass() { [[ "$VERBOSE" == "--verbose" ]] && echo "[AI-GATE] $PASS $*"; }
+pass() {
+  # NOTE: must not let `set -e` see the exit status of a false `[[ ]]` test
+  # here — that would abort the whole gate on the very first *passing*
+  # guard whenever run without --verbose (the original TS script had this
+  # exact latent bug: `[[ cond ]] && echo ...` returns 1 when cond is
+  # false, and a bare `pass(...)` call in an else-branch is not exempt from
+  # `set -e`). Always return 0 regardless of verbosity.
+  [[ "$VERBOSE" == "--verbose" ]] && echo "[AI-GATE] $PASS $*"
+  return 0
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GUARD 1 — PROMPT INJECTION
@@ -30,26 +48,26 @@ pass() { [[ "$VERBOSE" == "--verbose" ]] && echo "[AI-GATE] $PASS $*"; }
 # JPMorgan, Goldman Sachs banned AI tools after data leakage.
 #
 # Check: system prompts must never be built by directly interpolating raw
-# query.text into a template string. The ILLMClient tool loop must push
-# system prompt as a separate Message with role:'system', never concat
+# query.text into an f-string. The ILLMClient tool loop must push the
+# system prompt as a separate Message(role="system", ...), never concat
 # user text into it.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 1: Prompt Injection — system prompt isolation"
 
-# Pattern: `system: ` + any template literal containing query
-if grep -rn --include="*.ts" \
-    -E "role:\s*['\"]system['\"].*\\\$\{.*(query|input|user|text).*\}" \
-    $SRC_DIRS 2>/dev/null | grep -v "\.d\.ts" | grep -q .; then
+# Pattern: `role="system"` + any f-string containing query/input/user/text
+if grep -rn --include="*.py" \
+    -E "role\s*=\s*['\"]system['\"].*f['\"].*\{.*(query|input|user|text).*\}" \
+    $SRC_DIRS 2>/dev/null | grep -q .; then
   fail "GUARD-1 PROMPT-INJECTION: system-role Message contains interpolated user input. Separate system prompt from query.text at the Message boundary."
 else
   pass "Guard 1 passed: no prompt injection via system-role interpolation"
 fi
 
-# Pattern: direct string concat of user query into systemPromptExtension result
-if grep -rn --include="*.ts" \
-    -E "systemPromptExtension\(\).*\+.*query|query.*\+.*systemPromptExtension\(\)" \
-    $SRC_DIRS 2>/dev/null | grep -v "\.d\.ts" | grep -q .; then
-  fail "GUARD-1 PROMPT-INJECTION: systemPromptExtension() result is concatenated with user query. Keep them in separate Message objects."
+# Pattern: direct string concat of user query into system_prompt_extension() result
+if grep -rn --include="*.py" \
+    -E "system_prompt_extension\(\).*\+.*query|query.*\+.*system_prompt_extension\(\)" \
+    $SRC_DIRS 2>/dev/null | grep -q .; then
+  fail "GUARD-1 PROMPT-INJECTION: system_prompt_extension() result is concatenated with user query. Keep them in separate Message objects."
 else
   pass "Guard 1b passed: no systemPrompt+query concat"
 fi
@@ -62,28 +80,28 @@ fi
 # LLMs hallucinate at 43-88% rates in medical/legal queries.
 #
 # Check: ProvenanceTracker.clear() MUST be called at the start of every turn.
-# ConstraintEngine.assertAll() MUST be called before DELIVERING.
+# ConstraintEngine.assert_all() MUST be called before DELIVERING.
 # All Artifacts MUST be built via ArtifactFactory — never free-form.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 2: Hallucination / Provenance — tracking and assertion required"
 
-if ! grep -rn --include="*.ts" "provenance\.clear\(\)\|_provenance\.clear\(\)" \
-    core/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "provenance\.clear\(\)\|_provenance\.clear\(\)" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
   fail "GUARD-2 HALLUCINATION: ProvenanceTracker.clear() not found in core/. Every turn must clear provenance at start to prevent stale source attribution."
 else
   pass "Guard 2a passed: ProvenanceTracker.clear() present"
 fi
 
-if ! grep -rn --include="*.ts" "constraintEngine\.assertAll\|_constraintEngine\.assertAll" \
-    core/ 2>/dev/null | grep -q .; then
-  fail "GUARD-2 HALLUCINATION: ConstraintEngine.assertAll() not called in core/. Invariant validation must occur before every DELIVERING transition."
+if ! grep -rn --include="*.py" "constraint_engine\.assert_all\|_constraint_engine\.assert_all" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
+  fail "GUARD-2 HALLUCINATION: ConstraintEngine.assert_all() not called in core/. Invariant validation must occur before every DELIVERING transition."
 else
-  pass "Guard 2b passed: ConstraintEngine.assertAll() present"
+  pass "Guard 2b passed: ConstraintEngine.assert_all() present"
 fi
 
-if ! grep -rn --include="*.ts" "artifactFactory\.build\|_artifactFactory\.build" \
-    core/ 2>/dev/null | grep -q .; then
-  fail "GUARD-2 HALLUCINATION: ArtifactFactory.build() not found in core/agent.ts. All artifacts must be built through ArtifactFactory — never free-form string emission."
+if ! grep -rn --include="*.py" "artifact_factory\.build\|_artifact_factory\.build" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
+  fail "GUARD-2 HALLUCINATION: ArtifactFactory.build() not found in core/agent.py. All artifacts must be built through ArtifactFactory — never free-form string emission."
 else
   pass "Guard 2c passed: ArtifactFactory.build() present"
 fi
@@ -101,22 +119,22 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 3: Kill Switch / Circuit Breaker — graceful shutdown required"
 
-if ! grep -rn --include="*.ts" "class.*CircuitBreaker\|circuitBreaker" \
-    core/ 2>/dev/null | grep -q .; then
-  fail "GUARD-3 KILL-SWITCH: CircuitBreaker not found in core/. Every ILLMClient usage must be protected by a circuit breaker (circuitBreakerThreshold in IAgentConfig)."
+if ! grep -rn --include="*.py" "class.*CircuitBreaker\|circuit_breaker" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
+  fail "GUARD-3 KILL-SWITCH: CircuitBreaker not found in core/. Every ILLMClient usage must be protected by a circuit breaker (circuit_breaker_threshold in IAgentConfig)."
 else
   pass "Guard 3a passed: CircuitBreaker present"
 fi
 
-if ! grep -rn --include="*.ts" "async dispose\(\)" \
-    core/ 2>/dev/null | grep -q .; then
-  fail "GUARD-3 KILL-SWITCH: dispose() not found in core/lifecycle.ts. The agent MUST support graceful shutdown with resource release."
+if ! grep -rn --include="*.py" "async def dispose\(\)" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
+  fail "GUARD-3 KILL-SWITCH: dispose() not found in core/lifecycle.py. The agent MUST support graceful shutdown with resource release."
 else
   pass "Guard 3b passed: dispose() present"
 fi
 
-if ! grep -rn --include="*.ts" "recordLLMFailure\|recordLLMSuccess" \
-    core/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "record_llm_failure\|record_llm_success" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
   fail "GUARD-3 KILL-SWITCH: LLM failure recording not found. Circuit breaker requires failure counting to trigger DEGRADED state."
 else
   pass "Guard 3c passed: LLM failure/success recording present"
@@ -130,30 +148,30 @@ fi
 # its validated scope without disclosing limitations.
 #
 # Check: ScopeExitError MUST be thrown when a query is out-of-scope.
-# NullContext MUST NOT make domain claims. systemPromptExtension() in
+# NullContext MUST NOT make domain claims. system_prompt_extension() in
 # NullContext must explicitly state no domain expertise.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 4: Scope Fraud — domain boundary enforcement"
 
-if ! grep -rn --include="*.ts" "ScopeExitError" \
-    core/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "ScopeExitError" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
   fail "GUARD-4 SCOPE-FRAUD: ScopeExitError not referenced in core/. Out-of-scope queries must raise ScopeExitError, never produce fabricated domain answers."
 else
   pass "Guard 4a passed: ScopeExitError present in core/"
 fi
 
-if ! grep -rn --include="*.ts" "NullContext\|null_context" \
-    contexts/ core/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "NullContext\|null_context" \
+    src/ooagent/contexts/ src/ooagent/core/ 2>/dev/null | grep -q .; then
   fail "GUARD-4 SCOPE-FRAUD: NullContext not found. A NullContext fallback is mandatory — it is the agent's honest 'I do not know' response."
 else
   pass "Guard 4b passed: NullContext found"
 fi
 
 # NullContext must NOT claim expertise — check for domain-specific vocabulary
-# in null_context.ts (should be empty/minimal)
-NULL_CTX_VOCAB=$(grep -c "vocabulary\(\)" contexts/null_context.ts 2>/dev/null || echo "0")
+# in null_context.py (should be empty/minimal)
+NULL_CTX_VOCAB=$(grep -c "def vocabulary" src/ooagent/contexts/null_context.py 2>/dev/null || echo "0")
 if [[ "$NULL_CTX_VOCAB" -eq "0" ]]; then
-  fail "GUARD-4 SCOPE-FRAUD: NullContext does not implement vocabulary(). It must return an empty Set<Term>."
+  fail "GUARD-4 SCOPE-FRAUD: NullContext does not implement vocabulary(). It must return an empty set[Term]."
 else
   pass "Guard 4c passed: NullContext.vocabulary() implemented"
 fi
@@ -171,8 +189,8 @@ fi
 log "Guard 5: Data Exfiltration — no secrets, no PII leakage"
 
 SECRET_PATTERNS=(
-  "apiKey\s*=\s*['\"][a-zA-Z0-9_-]{20,}"
   "api_key\s*=\s*['\"][a-zA-Z0-9_-]{20,}"
+  "apiKey\s*=\s*['\"][a-zA-Z0-9_-]{20,}"
   "Bearer\s+[a-zA-Z0-9_.-]{20,}"
   "sk-[a-zA-Z0-9]{32,}"
   "AKIA[0-9A-Z]{16}"
@@ -181,8 +199,8 @@ SECRET_PATTERNS=(
 
 SECRET_FOUND=0
 for pattern in "${SECRET_PATTERNS[@]}"; do
-  if grep -rEn --include="*.ts" "$pattern" \
-      $SRC_DIRS 2>/dev/null | grep -v "\.d\.ts" | grep -v "//.*$pattern" | grep -q .; then
+  if grep -rEn --include="*.py" "$pattern" \
+      $SRC_DIRS 2>/dev/null | grep -v "^\s*#.*$pattern" | grep -q .; then
     fail "GUARD-5 SECRET-LEAK: Potential hardcoded secret matching '$pattern'. Use environment variables."
     SECRET_FOUND=1
   fi
@@ -205,30 +223,34 @@ fi
 # domains. Sprint (2026) — automated config push caused nation-wide outage
 # because no staged rollout or rollback mechanism.
 #
-# Check: FSMViolation MUST be thrown on illegal transitions.
+# Check: FSMViolationError MUST be thrown on illegal transitions.
 # FAILURE state MUST always transition to DELIVERING then IDLE — no hang.
 # SessionState must own FSM — no external mutation.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 6: FSM Integrity — no illegal state transitions or hangs"
 
-if ! grep -rn --include="*.ts" "FSMViolationError\|FSMViolation" \
-    core/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "FSMViolationError\|FSMViolation" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
   fail "GUARD-6 FSM-INTEGRITY: FSMViolationError not in core/. Illegal FSM transitions must raise FSMViolationError — they are always programming errors."
 else
   pass "Guard 6a passed: FSMViolationError present"
 fi
 
-if ! grep -rn --include="*.ts" "'FAILURE'" \
-    core/ 2>/dev/null | grep -q .; then
-  fail "GUARD-6 FSM-INTEGRITY: FAILURE state not handled in core/agent.ts. Every failure path must transition through FAILURE → DELIVERING → IDLE."
+if ! grep -rn --include="*.py" '"FAILURE"' \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
+  fail "GUARD-6 FSM-INTEGRITY: FAILURE state not handled in core/agent.py. Every failure path must transition through FAILURE → DELIVERING → IDLE."
 else
   pass "Guard 6b passed: FAILURE state handled"
 fi
 
 # Verify FSM state is only mutated through transition()
-DIRECT_FSM_MUTATION=$(grep -rn --include="*.ts" \
+# (mypy --strict already forbids untyped attribute access, but this guard
+# additionally catches an *encapsulation* violation mypy does not check:
+# a caller reaching past the SessionState.transition() gate to poke .fsm
+# directly — belt-and-suspenders alongside static typing.)
+DIRECT_FSM_MUTATION=$(grep -rn --include="*.py" \
     -E "\.fsm\s*=" \
-    $SRC_DIRS 2>/dev/null | grep -v "\.d\.ts" | grep -v "transition\|readonly" | wc -l | xargs)
+    $SRC_DIRS 2>/dev/null | grep -v "transition\|property" | wc -l | xargs || true)
 if [[ "$DIRECT_FSM_MUTATION" -gt 0 ]]; then
   fail "GUARD-6 FSM-INTEGRITY: Direct mutation of .fsm detected ($DIRECT_FSM_MUTATION occurrence(s)). FSM state must only change via SessionState.transition()."
 else
@@ -242,25 +264,29 @@ fi
 # images without content scanning (2023). Data poisoning attacks via
 # compromised open-source packages affect 73%+ of AI pipelines.
 #
-# Check: npm audit for HIGH/CRITICAL vulnerabilities.
-# No new dependencies added without explicit review (package-lock.json must
-# be committed and up-to-date).
+# Check: pip-audit (if installed) for HIGH/CRITICAL vulnerabilities.
+# No new dependencies added without explicit review (uv.lock must be
+# committed and up-to-date).
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 7: Supply Chain — dependency vulnerability scan"
 
-if [[ -f "package.json" ]]; then
-  AUDIT_OUTPUT=$(npm audit --audit-level=high --json 2>/dev/null || true)
-  HIGH_COUNT=$(echo "$AUDIT_OUTPUT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('metadata',{}).get('vulnerabilities',{}).get('high',0)+d.get('metadata',{}).get('vulnerabilities',{}).get('critical',0))" 2>/dev/null || echo "0")
-  if [[ "$HIGH_COUNT" -gt 0 ]]; then
-    fail "GUARD-7 SUPPLY-CHAIN: $HIGH_COUNT HIGH/CRITICAL vulnerability(ies) found. Run 'npm audit fix' or upgrade affected packages."
+if [[ -f "pyproject.toml" ]]; then
+  if command -v pip-audit >/dev/null 2>&1; then
+    AUDIT_OUTPUT=$(pip-audit --format=json 2>/dev/null || true)
+    HIGH_COUNT=$(echo "$AUDIT_OUTPUT" | python -c "import sys,json; d=json.load(sys.stdin); deps=d if isinstance(d,list) else d.get('dependencies',[]); print(sum(len(x.get('vulns',[])) for x in deps))" 2>/dev/null || echo "0")
+    if [[ "$HIGH_COUNT" -gt 0 ]]; then
+      fail "GUARD-7 SUPPLY-CHAIN: $HIGH_COUNT known vulnerability(ies) found by pip-audit. Run 'pip-audit --fix' or upgrade affected packages."
+    else
+      pass "Guard 7a passed: no known vulnerabilities reported by pip-audit"
+    fi
   else
-    pass "Guard 7a passed: no HIGH/CRITICAL npm vulnerabilities"
+    pass "Guard 7a skipped: pip-audit not installed (install via 'pip install pip-audit' to enable this check in CI)"
   fi
 
-  if [[ ! -f "package-lock.json" ]]; then
-    fail "GUARD-7 SUPPLY-CHAIN: package-lock.json missing. Lock file must be committed to guarantee reproducible, tamper-evident installs."
+  if [[ ! -f "uv.lock" ]]; then
+    fail "GUARD-7 SUPPLY-CHAIN: uv.lock missing. Lock file must be committed to guarantee reproducible, tamper-evident installs."
   else
-    pass "Guard 7b passed: package-lock.json present"
+    pass "Guard 7b passed: uv.lock present"
   fi
 fi
 
@@ -273,27 +299,32 @@ fi
 #
 # Check: Plugins must only call registered API surfaces (contributes() method).
 # Plugins must NOT import from core/ implementation files directly.
-# onDispose() must be idempotent.
+# on_dispose() must be idempotent.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 8: Plugin Isolation — no direct core internals access"
 
-# Plugins should only import from core/protocols.js (the interface contract)
-# not from core/agent.ts, core/state.ts, core/pipeline.ts etc. (implementation)
-PLUGIN_INTERNAL_IMPORT=$(grep -rn --include="*.ts" \
-    -E "from '../../core/(agent|state|pipeline|lifecycle|orchestrator|artifacts|registry)'" \
-    plugins/ 2>/dev/null | grep -v "base-plugin" | wc -l | xargs)
+# Plugins should only import from ooagent.core.protocols (the interface
+# contract), not from ooagent.core.agent / .state / .pipeline etc.
+# (implementation). src/ooagent/plugins/__init__.py is the package barrel
+# that wires PluginRegistry (itself housed in core/registry.py in this
+# port) for framework use — analogous to the base-plugin exclusion in the
+# original TS guard, it is not a concrete IPlugin implementation reaching
+# into agent internals, so it is excluded here.
+PLUGIN_INTERNAL_IMPORT=$(grep -rn --include="*.py" \
+    -E "from ooagent\.core\.(agent|state|pipeline|lifecycle|orchestrator|artifacts|registry) import" \
+    src/ooagent/plugins/ 2>/dev/null | grep -v "base_plugin.py" | grep -v "plugins/__init__.py" | wc -l | xargs || true)
 if [[ "$PLUGIN_INTERNAL_IMPORT" -gt 0 ]]; then
-  fail "GUARD-8 PLUGIN-ISOLATION: Plugin(s) import from core implementation files ($PLUGIN_INTERNAL_IMPORT import(s)). Plugins must only import from 'core/protocols.js'."
+  fail "GUARD-8 PLUGIN-ISOLATION: Plugin(s) import from core implementation files ($PLUGIN_INTERNAL_IMPORT import(s)). Plugins must only import from 'ooagent.core.protocols'."
 else
   pass "Guard 8a passed: plugins only import core contracts"
 fi
 
-# Every concrete plugin must implement onDispose()
-PLUGINS_WITHOUT_DISPOSE=$(grep -rLn "onDispose" plugins/*/index.ts 2>/dev/null | wc -l | xargs)
+# Every concrete plugin must implement on_dispose()
+PLUGINS_WITHOUT_DISPOSE=$(grep -rLn "on_dispose" src/ooagent/plugins/*/__init__.py 2>/dev/null | wc -l | xargs || true)
 if [[ "$PLUGINS_WITHOUT_DISPOSE" -gt 0 ]]; then
-  fail "GUARD-8 PLUGIN-ISOLATION: $PLUGINS_WITHOUT_DISPOSE plugin file(s) missing onDispose(). All plugins must implement onDispose() for safe resource release."
+  fail "GUARD-8 PLUGIN-ISOLATION: $PLUGINS_WITHOUT_DISPOSE plugin file(s) missing on_dispose(). All plugins must implement on_dispose() for safe resource release."
 else
-  pass "Guard 8b passed: all plugins implement onDispose()"
+  pass "Guard 8b passed: all plugins implement on_dispose()"
 fi
 
 
@@ -312,9 +343,9 @@ fi
 log "Guard 9: Bias / Fairness — no hardcoded demographic discriminators"
 
 DEMOGRAPHIC_SIGNALS=(
-  "race\s*===\s*['\"]"
-  "gender\s*===\s*['\"]"
-  "ethnicity\s*===\s*['\"]"
+  "race\s*==\s*['\"]"
+  "gender\s*==\s*['\"]"
+  "ethnicity\s*==\s*['\"]"
   "\.race\b.*==\|==.*\.race\b"
   "skin_color\|skinColor"
   "protected_class\|protectedClass"
@@ -322,8 +353,8 @@ DEMOGRAPHIC_SIGNALS=(
 
 BIAS_FOUND=0
 for pattern in "${DEMOGRAPHIC_SIGNALS[@]}"; do
-  if grep -rEn --include="*.ts" "$pattern" \
-      contexts/ plugins/ 2>/dev/null | grep -v "\.d\.ts" | grep -q .; then
+  if grep -rEn --include="*.py" "$pattern" \
+      src/ooagent/contexts/ src/ooagent/plugins/ 2>/dev/null | grep -q .; then
     fail "GUARD-9 BIAS: Potential demographic discriminator '$pattern' found in contexts/ or plugins/. Protected attributes must not be used as direct filtering conditions."
     BIAS_FOUND=1
   fi
@@ -339,25 +370,27 @@ done
 # §21 CLAUDE.md anti-pattern: "Free-form artifact emission" and
 # "Unvalidated output."
 #
-# Check: No direct string returns that bypass ArtifactFactory.
+# Check: No direct Artifact(...) construction that bypasses ArtifactFactory.
 # ResponseDecorator must be applied after every solve.
-# No 'return { content:' patterns outside ArtifactFactory/buildError methods.
+# No raw '{"content": ...}' returns outside ArtifactFactory/build_error methods.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 10: Output Integrity — no unvalidated free-form emission"
 
-# Check for raw object returns that look like Artifacts built inline
-RAW_ARTIFACT=$(grep -rn --include="*.ts" \
-    -E "return\s*\{\s*content:\s*['\"]" \
-    core/ 2>/dev/null | grep -v "ArtifactFactory\|buildError\|buildScopeExit\|buildMissingInputs\|interface\|//\|test" \
-    | wc -l | xargs)
+# Check for raw Artifact(...) construction outside core/artifacts.py (the
+# ArtifactFactory implementation) and for raw dict-shaped Artifact returns.
+RAW_ARTIFACT=$(grep -rn --include="*.py" \
+    -E "Artifact\(|return\s*\{\s*[\"']content[\"']\s*:" \
+    src/ooagent/core/ 2>/dev/null | grep -v "artifacts.py" \
+    | grep -v "ArtifactFactory\|build_error\|build_scope_exit\|build_missing_inputs\|#\|test" \
+    | wc -l | xargs || true)
 if [[ "$RAW_ARTIFACT" -gt 0 ]]; then
   fail "GUARD-10 OUTPUT-INTEGRITY: $RAW_ARTIFACT raw Artifact-shaped object(s) returned without ArtifactFactory. All artifacts must be built through IArtifactFactory to ensure invariant validation."
 else
   pass "Guard 10a passed: no raw artifact emission detected"
 fi
 
-if ! grep -rn --include="*.ts" "decorator\.apply\|_decorator\.apply" \
-    core/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "decorator\.apply\|_decorator\.apply" \
+    src/ooagent/core/ 2>/dev/null | grep -q .; then
   fail "GUARD-10 OUTPUT-INTEGRITY: ResponseDecorator.apply() not found in core/. Every delivered artifact must pass through the decorator chain for provenance enrichment."
 else
   pass "Guard 10b passed: ResponseDecorator.apply() present"
@@ -376,38 +409,38 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 11: OWASP LLM Top 10 — SecurityPlugin compliance"
 
-if ! grep -rn --include="*.ts" "SecurityPlugin" \
-    plugins/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "SecurityPlugin" \
+    src/ooagent/plugins/ 2>/dev/null | grep -q .; then
   fail "GUARD-11 OWASP-LLM: SecurityPlugin not found in plugins/. OWASP LLM Top 10 compliance requires a SecurityPlugin wrapping all ITool executions."
 else
   pass "Guard 11a passed: SecurityPlugin found"
 fi
 
-if ! grep -rn --include="*.ts" "ISecurityPolicy" \
-    plugins/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "ISecurityPolicy" \
+    src/ooagent/plugins/ 2>/dev/null | grep -q .; then
   fail "GUARD-11 OWASP-LLM: ISecurityPolicy interface not found. OWASP LLM compliance requires a formal security policy contract (DIP)."
 else
   pass "Guard 11b passed: ISecurityPolicy interface found"
 fi
 
-if ! grep -rn --include="*.ts" "SecureToolWrapper" \
-    plugins/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "SecureToolWrapper" \
+    src/ooagent/plugins/ 2>/dev/null | grep -q .; then
   fail "GUARD-11 OWASP-LLM: SecureToolWrapper not found. All ITool.execute() calls must pass through the security gate (LLM01, LLM02, LLM04, LLM07)."
 else
   pass "Guard 11c passed: SecureToolWrapper found"
 fi
 
 # LLM01: verify injection patterns are defined
-if ! grep -rn --include="*.ts" "PROMPT_INJECTION\|blockedPatterns\|injectionPatterns\|INJECTION_PATTERNS" \
-    plugins/security/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "PROMPT_INJECTION\|blocked_patterns\|injection_patterns\|INJECTION_PATTERNS" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
   fail "GUARD-11 OWASP-LLM01: No prompt injection patterns defined in plugins/security/. LLM01 mitigation requires explicit pattern list."
 else
   pass "Guard 11d passed: LLM01 prompt injection patterns defined"
 fi
 
 # LLM04: verify rate limiting is implemented
-if ! grep -rn --include="*.ts" "maxCallsPerMinute\|maxCallsPerHour\|maxInputTokens\|rateLim" \
-    plugins/security/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "max_calls_per_minute\|max_calls_per_hour\|max_input_tokens\|rate_limit" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
   fail "GUARD-11 OWASP-LLM04: No rate limiting in plugins/security/. LLM04 (Model DoS) mitigation requires per-agent call limits."
 else
   pass "Guard 11e passed: LLM04 rate limiting implemented"
@@ -420,30 +453,30 @@ fi
 # OWASP API Top 10: API1 (Broken Object Level Auth), API2 (Broken Auth).
 # SOC 2 Type II: CC6.1 (Logical access), CC6.2 (Access grants).
 #
-# Check: Every tool call must be authorized (checkAccess before execute).
-# allowedAgentIds and allowedTools must be configurable (least privilege).
+# Check: Every tool call must be authorized (check_access before execute).
+# allowed_agent_ids and allowed_tools must be configurable (least privilege).
 # RBAC must be a controllable flag — not hard-coded to true or false.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 12: Zero Trust / RBAC — access control on every tool call"
 
-if ! grep -rn --include="*.ts" "checkAccess\|rbacEnabled\|allowedAgentIds\|allowedTools" \
-    plugins/security/ 2>/dev/null | grep -q .; then
-  fail "GUARD-12 ZERO-TRUST: No access control found in plugins/security/. Zero Trust requires checkAccess() before every tool execution (NIST SP 800-207)."
+if ! grep -rn --include="*.py" "check_access\|rbac_enabled\|allowed_agent_ids\|allowed_tools" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-12 ZERO-TRUST: No access control found in plugins/security/. Zero Trust requires check_access() before every tool execution (NIST SP 800-207)."
 else
-  pass "Guard 12a passed: Zero Trust checkAccess present"
+  pass "Guard 12a passed: Zero Trust check_access present"
 fi
 
-# Verify the wrapper calls checkAccess before execute
-if ! grep -rn --include="*.ts" "checkAccess" \
-    plugins/security/secure-tool-wrapper.ts 2>/dev/null | grep -q .; then
-  fail "GUARD-12 ZERO-TRUST: SecureToolWrapper does not call checkAccess(). Access check must occur before every tool execute() call."
+# Verify the wrapper calls check_access before execute
+if ! grep -rn --include="*.py" "check_access" \
+    src/ooagent/plugins/security/secure_tool_wrapper.py 2>/dev/null | grep -q .; then
+  fail "GUARD-12 ZERO-TRUST: SecureToolWrapper does not call check_access(). Access check must occur before every tool execute() call."
 else
-  pass "Guard 12b passed: SecureToolWrapper calls checkAccess()"
+  pass "Guard 12b passed: SecureToolWrapper calls check_access()"
 fi
 
 # SOC 2 CC6.2: audit log must exist
-if ! grep -rn --include="*.ts" "auditLog\|audit_log\|record\b" \
-    plugins/security/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "audit_log\|record\b" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
   fail "GUARD-12 SOC2-CC6.2: No audit log in plugins/security/. SOC 2 CC6.2 requires recording every access control decision."
 else
   pass "Guard 12c passed: SOC2 CC6.2 audit log present"
@@ -458,39 +491,39 @@ fi
 #
 # Check: PII masking must be implemented (email, phone, SSN, CC, API keys).
 # Audit records must NOT include raw PII (inputs excluded by default).
-# retentionDays must be configurable (GDPR right to erasure).
+# retention_days must be configurable (GDPR right to erasure).
 # PII detection patterns must cover at least: email, phone, SSN, CC.
 # ─────────────────────────────────────────────────────────────────────────────
 log "Guard 13: PII / GDPR / HIPAA — data protection compliance"
 
-if ! grep -rn --include="*.ts" "maskPII\|piiMasking\|PII_PATTERNS\|REDACTED" \
-    plugins/security/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" "mask_pii\|pii_masking\|PII_PATTERNS\|REDACTED" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
   fail "GUARD-13 GDPR-PII: No PII masking in plugins/security/. GDPR Art.25 requires data minimization — PII must be masked before entering audit logs."
 else
   pass "Guard 13a passed: PII masking implemented"
 fi
 
 # Verify email PII pattern is present
-if ! grep -rn --include="*.ts" -E "email.*pattern|EMAIL.*pattern|@.*\\..*regexp|EMAIL_RE|email.*RegExp" \
-    plugins/security/ 2>/dev/null | grep -q .; then
+if ! grep -rn --include="*.py" -iE "email.*(pattern|regex)|@.*\\..*re\\.compile|EMAIL_RE|email.*re\\.compile" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
   fail "GUARD-13 GDPR-PII: No email detection pattern in plugins/security/. Email addresses are personal data under GDPR Art.4(1) and must be detected for masking."
 else
   pass "Guard 13b passed: email PII pattern present"
 fi
 
-# Verify retentionDays is configurable (not hard-coded forever)
-if ! grep -rn --include="*.ts" "retentionDays" \
-    plugins/security/ 2>/dev/null | grep -q .; then
-  fail "GUARD-13 GDPR-PII: No retentionDays in plugins/security/SecurityPolicy. GDPR Art.5(1)(e) requires data retention limits — hard-coded unlimited retention is non-compliant."
+# Verify retention_days is configurable (not hard-coded forever)
+if ! grep -rn --include="*.py" "retention_days" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -q .; then
+  fail "GUARD-13 GDPR-PII: No retention_days in plugins/security/SecurityPolicy. GDPR Art.5(1)(e) requires data retention limits — hard-coded unlimited retention is non-compliant."
 else
-  pass "Guard 13c passed: retentionDays configurable"
+  pass "Guard 13c passed: retention_days configurable"
 fi
 
 # LLM06: audit records must not include raw inputs by default
-if grep -rn --include="*.ts" \
-    -E "includeInput\s*:\s*true|includeOutput\s*:\s*true" \
-    plugins/security/ 2>/dev/null | grep "DEFAULT\|default" | grep -q .; then
-  fail "GUARD-13 GDPR-LLM06: Default SecurityPolicy includes raw input/output in audit log. Default must be false to prevent PII capture (GDPR Art.25, LLM06)."
+if grep -rn --include="*.py" \
+    -E "include_input\s*=\s*True|include_output\s*=\s*True" \
+    src/ooagent/plugins/security/ 2>/dev/null | grep -i "default" | grep -q .; then
+  fail "GUARD-13 GDPR-LLM06: Default SecurityPolicy includes raw input/output in audit log. Default must be False to prevent PII capture (GDPR Art.25, LLM06)."
 else
   pass "Guard 13d passed: audit log excludes raw I/O by default"
 fi

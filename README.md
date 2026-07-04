@@ -1,7 +1,7 @@
 # OOAgent — Object-Oriented AI Agent Framework
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5+-3178C6.svg)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 
 > A backend-agnostic, domain-agnostic AI agent framework governed by SOLID, GRASP, and GoF design patterns.
 > Fork it, plug in your domain, wire your LLM, ship.
@@ -19,7 +19,7 @@ The core is agnostic to both **inference backend** (Claude, GPT-4o, Gemini, Llam
 ## Architecture at a Glance
 
 ```
-IAgent<TQuery, TResponse>
+IAgent[TQuery, TResponse]
 └── AbstractAgent
     └── LLMAgent
         └── OOAgent  ← composition root
@@ -45,42 +45,47 @@ IAgent<TQuery, TResponse>
 ## Project Structure
 
 ```
-ooagent/
+src/ooagent/
 ├── core/
-│   ├── protocols.ts      # All interfaces & types (zero runtime dependencies)
-│   ├── agent.ts          # OOAgent — Template Method implementation
-│   ├── state.ts          # SessionState, FSM, Memento, Command log
-│   ├── pipeline.ts       # ResponsePipeline (CoR), ConstraintEngine
-│   ├── artifacts.ts      # ArtifactFactory, ProvenanceTracker, ResponseDecorator
-│   ├── registry.ts       # ContextRegistry, ToolRegistry, PluginRegistry
-│   ├── lifecycle.ts      # LifecycleManager, HealthStatus, CircuitBreaker
-│   └── orchestrator.ts   # MultiAgentOrchestrator, SignalBus
+│   ├── protocols.py      # All interfaces & types (zero runtime dependencies)
+│   ├── agent.py          # AbstractAgent, LLMAgent, OOAgent — Template Method implementation
+│   ├── state.py          # SessionState, FSM, Memento, Command log
+│   ├── pipeline.py       # ResponsePipeline (CoR), ConstraintEngine
+│   ├── artifacts.py      # ArtifactFactory, ProvenanceTracker, ResponseDecorator
+│   ├── registry.py       # ContextRegistry (Singleton), ToolRegistry, PluginRegistry
+│   ├── lifecycle.py      # LifecycleManager, HealthStatus, CircuitBreaker
+│   └── orchestrator.py   # MultiAgentOrchestrator, SignalBus
 │
 ├── adapters/
 │   ├── llm/
-│   │   ├── anthropic.ts  # ILLMClient → Anthropic Messages API
-│   │   ├── openai.ts     # ILLMClient → OpenAI Chat API
-│   │   ├── gemini.ts     # ILLMClient → Gemini API
-│   │   ├── ollama.ts     # ILLMClient → Ollama (local)
-│   │   └── caching_proxy.ts  # CachingLLMProxy (Proxy pattern)
-│   └── tools/
-│       ├── base.ts       # BaseTool abstract class
-│       └── adapter.ts    # ToolAdapter (Adapter pattern)
+│   │   ├── anthropic.py  # ILLMClient → Anthropic Messages API
+│   │   ├── openai.py     # ILLMClient → OpenAI Chat API
+│   │   ├── gemini.py     # ILLMClient → Gemini API
+│   │   ├── ollama.py     # ILLMClient → Ollama (local)
+│   │   └── caching_proxy.py  # CachingLLMProxy, ThrottlingLLMProxy (Proxy pattern)
+│   ├── tools/
+│   │   ├── base.py       # BaseTool abstract class
+│   │   └── adapter.py    # ToolAdapter (Adapter pattern)
+│   └── data/             # IDataStore protocol + in-memory implementation
 │
 ├── contexts/
-│   └── null_context.ts   # NullContext (Null Object — safe default)
+│   └── null_context.py   # NullContext (Null Object — safe default)
 │
 ├── plugins/
-│   └── registry.ts       # PluginRegistry
+│   ├── base_plugin.py    # AbstractPlugin — reduces IPlugin boilerplate
+│   └── logging/ audit/ cache/ rate_limit/ scope_guard/ security/ opentelemetry/ tool_kit/
 │
-├── telemetry/
-│   ├── null_telemetry.ts # NullTelemetry (no-op — default)
-│   └── console.ts        # ConsoleTelemetry (development)
-│
-└── testing/
-    ├── stub_llm_client.ts  # Deterministic ILLMClient for unit tests
-    ├── null_context.ts     # Re-exports NullContext
-    └── fixtures.ts         # Common test doubles
+└── telemetry/
+    ├── null_telemetry.py # NullTelemetry (no-op — default)
+    ├── otel.py           # OpenTelemetryProvider
+    └── console.py        # ConsoleTelemetry (development)
+
+tests/
+├── core/ adapters/ plugins/  # Unit tests mirroring src/ooagent/
+├── conformance/              # IAgent / IDomainContext / ITool / ILLMClient conformance suites
+├── stub_llm_client.py        # Deterministic ILLMClient for unit tests
+├── null_context.py           # Re-exports NullContext
+└── fixtures.py                # Common test doubles
 ```
 
 ---
@@ -90,57 +95,84 @@ ooagent/
 ### 1. Install
 
 ```bash
-npm install
-npm run build
+uv sync --extra dev --extra otel
 ```
 
 ### 2. Wire an LLM backend
 
-```typescript
-import { OOAgent } from 'ooagent'
-import { AnthropicLLMClient } from 'ooagent/adapters'
+```python
+import asyncio
+import os
 
-const agent = new OOAgent({
-  llmClient: new AnthropicLLMClient({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
-    model: 'claude-opus-4-8',
-  }),
-})
+from ooagent.core.agent import OOAgent
+from ooagent.core.protocols import AgentConfig, Query
+from ooagent.adapters.llm.anthropic import AnthropicConfig, AnthropicLLMClient
 
-await agent.initialize({})
-const response = await agent.respond({ text: 'Hello, agent.' })
-await agent.dispose()
+
+async def main() -> None:
+    agent = OOAgent(
+        llm_client=AnthropicLLMClient(
+            AnthropicConfig(api_key=os.environ["ANTHROPIC_API_KEY"], model="claude-opus-4-6"),
+        ),
+    )
+
+    await agent.initialize(AgentConfig())
+    response = await agent.respond(Query(text="Hello, agent."))
+    await agent.dispose()
+
+
+asyncio.run(main())
 ```
 
 ### 3. Plug in a domain context
 
-```typescript
-import { IDomainContext } from 'ooagent/core'
-import { ContextRegistry } from 'ooagent/core'
+```python
+from ooagent.core.protocols import IDomainContext
+from ooagent.core.registry import ContextRegistry
 
-class EngineeringContext implements IDomainContext {
-  name    = 'Engineering'
-  version = '1.0.0'
-  // implement all 10 methods …
-}
 
-const registry = new ContextRegistry()
-registry.register(new EngineeringContext())
+class EngineeringContext(IDomainContext):
+    @property
+    def name(self) -> str:
+        return "Engineering"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    # implement the remaining 10 methods …
+
+
+registry = ContextRegistry.get_instance()
+registry.register(EngineeringContext())
 ```
 
 ### 4. Register tools
 
-```typescript
-import { ITool, BaseTool } from 'ooagent/adapters'
+```python
+from typing import Any
 
-class SearchTool extends BaseTool {
-  name        = 'search'
-  description = 'Web search'
-  inputSchema() { return { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } }
-  async execute(args) { /* … */ }
-}
+from ooagent.adapters.tools.base import BaseTool
+from ooagent.core.protocols import JSONSchema
+from ooagent.core.registry import ToolRegistry
 
-agent.toolRegistry.register(new SearchTool())
+
+class SearchTool(BaseTool):
+    name = "search"
+    description = "Web search"
+
+    def input_schema(self) -> JSONSchema:
+        return {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+
+    async def execute(self, args: dict[str, Any]) -> Any:
+        self._validate_args(args)
+        ...
+
+
+tool_registry = ToolRegistry()
+tool_registry.register(SearchTool())
+
+agent = OOAgent(llm_client=..., tool_registry=tool_registry)
 ```
 
 ---
@@ -200,30 +232,37 @@ See [CLAUDE.md](CLAUDE.md) §4 for the full pattern-to-implementation mapping.
 1. Implement `IDomainContext` (10 methods).
 2. Write `CONTEXT.md` per the spec in [CLAUDE.md §14](CLAUDE.md).
 3. Write conformance tests (see [CLAUDE.md §17](CLAUDE.md)).
-4. Register: `contextRegistry.register(new MyContext())`.
+4. Register: `context_registry.register(MyContext())`.
 5. No edits to `core/` — OCP enforced.
 
 ### Add a tool
 
 1. Extend `BaseTool` or implement `ITool`.
-2. Register: `toolRegistry.register(new MyTool())`.
+2. Register: `tool_registry.register(MyTool())`.
 
 ### Add a new LLM backend
 
 1. Implement `ILLMClient`.
-2. Inject at construction: `new OOAgent({ llmClient: new MyClient() })`.
+2. Inject at construction: `OOAgent(llm_client=MyClient())`.
 
 ### Add a plugin
 
-```typescript
-class MyPlugin implements IPlugin {
-  pluginId = 'my-plugin'
-  version  = '1.0.0'
-  onRegister(agent) { /* register tools / contexts */ }
-  onDispose() { /* release resources */ }
-  contributes() { return { tools: [new MyTool()] } }
-}
-pluginRegistry.register(new MyPlugin())
+```python
+class MyPlugin(AbstractPlugin):
+    plugin_id = "my-plugin"
+    version = "1.0.0"
+
+    def on_register(self, agent):
+        ...  # register tools / contexts
+
+    def on_dispose(self):
+        ...  # release resources
+
+    def contributes(self) -> PluginContributions:
+        return PluginContributions(tools=[MyTool()])
+
+
+plugin_registry.register(MyPlugin())
 ```
 
 ---
@@ -236,18 +275,18 @@ Every response is validated before emission:
 - **Numbers** — every numeric claim carries `value + unit + SourceTag` (`measured | assumed | cited | derived`).
 - **Recommendations** — falsifiable or measurable. No speculation.
 - **Artifacts** — built exclusively via `ArtifactFactory`. Never free-form emission.
-- **Invariants** — `ConstraintEngine.assertAll()` must pass before any artifact is emitted.
+- **Invariants** — `ConstraintEngine.assert_all()` must pass before any artifact is emitted.
 
 ---
 
 ## Testing
 
 ```bash
-npm test          # run jest suite
-npm run typecheck # TypeScript strict check
+uv run pytest         # run the pytest suite (pytest-asyncio, auto mode)
+uv run mypy --strict  # strict type check
 ```
 
-The `testing/` package ships `StubLLMClient`, `NullTelemetry`, `NullContext`, and fixture factories for deterministic unit tests. Every `IAgent`, `IDomainContext`, `ITool`, `IPlugin`, and `ILLMClient` implementation must include a conformance test suite (see [CLAUDE.md §17](CLAUDE.md)).
+The `tests/` tree ships `StubLLMClient`, `NullTelemetry`, `NullContext`, and fixture factories for deterministic unit tests. Every `IAgent`, `IDomainContext`, `ITool`, `IPlugin`, and `ILLMClient` implementation must include a conformance test suite (see [CLAUDE.md §17](CLAUDE.md), and `tests/conformance/`).
 
 ---
 
@@ -255,10 +294,12 @@ The `testing/` package ships `StubLLMClient`, `NullTelemetry`, `NullContext`, an
 
 | Command | Action |
 |---|---|
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm run build:watch` | Watch mode compilation |
-| `npm run typecheck` | Type-check without emit |
-| `npm test` | Run jest test suite |
+| `uv sync --extra dev --extra otel` | Install runtime + dev + OpenTelemetry dependencies |
+| `uv run mypy --strict` | Strict type check, no emit |
+| `uv run ruff check` | Lint (import order, unused imports, upgrades) |
+| `uv run pytest` | Run the test suite |
+| `bash scripts/ai-safety-gate.sh --verbose` | Run the 13 AI Safety Guards |
+| `bash scripts/conformance-check.sh` | Verify §17 conformance suites exist and pass |
 
 ---
 

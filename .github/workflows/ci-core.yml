@@ -1,7 +1,8 @@
 name: CI Core
 
 # Runs on every push and PR to any branch.
-# Enforces: TypeScript build, conformance tests, SDD static check, and AI Safety Guards.
+# Enforces: Python build (uv), mypy --strict, ruff lint/format, conformance
+# tests, SDD static check, and AI Safety Guards.
 
 on:
   push:
@@ -13,8 +14,8 @@ concurrency:
   group: ci-core-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  NODE_VERSION: '22'
+# Python version is pinned via .python-version (3.11); uv resolves it
+# automatically for every `uv sync` / `uv run` invocation below.
 
 jobs:
   # ── 1. Build ───────────────────────────────────────────────────────────────
@@ -24,23 +25,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
-        run: npm ci
+        run: uv sync --extra dev --extra otel
 
       - name: Type check (strict)
-        run: npm run typecheck
+        run: uv run mypy --strict
+
+      - name: Lint (ruff check)
+        run: uv run ruff check
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check
 
       - name: Build
-        run: npm run build
+        run: uv build
 
       - name: Run conformance tests
-        run: node --test dist/testing/conformance/*.test.js
+        run: PYTHONPATH=src uv run pytest tests/conformance/ -v
 
       - name: Upload dist artifact
         uses: actions/upload-artifact@v4
@@ -55,12 +59,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
       - name: Validate version format
-        run: bash scripts/version-check.sh
+        run: uv run bash scripts/version-check.sh
 
   # ── 3. SDD Conformance ─────────────────────────────────────────────────────
   sdd-conformance:
@@ -69,12 +71,21 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install dependencies
+        run: uv sync --extra dev --extra otel
       - name: Check interface conformance tests
-        run: bash scripts/conformance-check.sh
+        run: uv run bash scripts/conformance-check.sh
 
   # ── 4. AI Safety Gate ─────────────────────────────────────────────────────
-  # Each of the 10 guards maps to documented AI disasters (2020-2026).
+  # Each of the 13 guards maps to documented AI disasters (2020-2026).
   # A failing guard BLOCKS the merge — it is not advisory.
+  # NOTE: the job `name:` below intentionally still says "10 Disaster Guards"
+  # even though scripts/ai-safety-gate.sh now has 13 guards — GitHub branch
+  # protection matches required status checks by this exact displayed name,
+  # so renaming it needs a deliberate, reviewed change to branch protection
+  # settings, not a silent rename here.
   ai-safety-gate:
     name: AI Safety Gate (10 Disaster Guards)
     runs-on: ubuntu-latest
@@ -82,19 +93,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
 
       - name: Install dependencies
-        run: npm ci
+        run: uv sync --extra dev --extra otel
 
       - name: Run AI Safety Gate
         run: |
           chmod +x scripts/ai-safety-gate.sh
-          bash scripts/ai-safety-gate.sh --verbose
+          uv run bash scripts/ai-safety-gate.sh --verbose
 
       - name: Upload safety report
         if: always()
@@ -121,18 +129,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ── 6. Dependency Audit ───────────────────────────────────────────────────
-  # Guard 7: Supply chain — npm audit for HIGH/CRITICAL vulnerabilities
+  # Guard 7: Supply chain — pip-audit for known vulnerabilities
   dependency-audit:
     name: Dependency Audit (Guard 7 — Supply Chain)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
       - name: Install dependencies
-        run: npm ci
-      - name: npm audit (HIGH+CRITICAL)
-        run: npm audit --audit-level=high
+        run: uv sync --extra dev --extra otel
+      # NOTE: pip-audit has no `--audit-level`-style severity flag (unlike the
+      # `npm audit --audit-level=high` this job replaces), so this gate fails
+      # on ANY known vulnerability, including LOW/MEDIUM severity — not just
+      # HIGH/CRITICAL as before. This is an intentional, documented tightening
+      # of the dependency-audit gate, not an accidental behavior change.
+      - name: pip-audit (known vulnerabilities — fails on ANY severity, see note above)
+        run: uv run --with pip-audit pip-audit

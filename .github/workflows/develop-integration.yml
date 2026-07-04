@@ -8,8 +8,8 @@ on:
   push:
     branches: [develop]
 
-env:
-  NODE_VERSION: '22'
+# Python version is pinned via .python-version (3.11); uv resolves it
+# automatically for every `uv sync` / `uv run` invocation below.
 
 jobs:
   # ── Full CI Core (re-run on develop push) ─────────────────────────────────
@@ -19,20 +19,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
 
       - name: Install
-        run: npm ci
+        run: uv sync --extra dev --extra otel
 
       - name: Type check
-        run: npm run typecheck
+        run: uv run mypy --strict
+
+      - name: Lint (ruff check)
+        run: uv run ruff check
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check
 
       - name: Build
-        run: npm run build
+        run: uv build
 
   # ── AI Safety Gate ────────────────────────────────────────────────────────
   ai-safety:
@@ -41,12 +44,9 @@ jobs:
     needs: build-and-verify
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
-      - run: bash scripts/ai-safety-gate.sh --verbose
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --extra dev --extra otel
+      - run: uv run bash scripts/ai-safety-gate.sh --verbose
 
   # ── SDD Conformance ───────────────────────────────────────────────────────
   sdd:
@@ -55,7 +55,9 @@ jobs:
     needs: build-and-verify
     steps:
       - uses: actions/checkout@v4
-      - run: bash scripts/conformance-check.sh
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --extra dev --extra otel
+      - run: uv run bash scripts/conformance-check.sh
 
   # ── Integration Tests with StubLLMClient ─────────────────────────────────
   integration:
@@ -64,15 +66,10 @@ jobs:
     needs: [ai-safety, sdd]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-      - run: npm ci
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --extra dev --extra otel
       - name: Run tests
-        run: npm test -- --passWithNoTests
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
+        run: PYTHONPATH=src uv run pytest tests/ -v
 
   # ── Nightly Snapshot to GitHub Packages ──────────────────────────────────
   snapshot:
@@ -84,25 +81,25 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          registry-url: 'https://npm.pkg.github.com'
-          scope: '@aaronrmdev'
+      - uses: astral-sh/setup-uv@v3
 
-      - run: npm ci
-      - run: npm run build
+      - run: uv sync --extra dev --extra otel
 
       - name: Stamp snapshot version
         run: |
-          PKG_VERSION=$(node -p "require('./package.json').version")
+          PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           SHORT_SHA=$(echo "${{ github.sha }}" | head -c 7)
-          SNAPSHOT_VERSION="${PKG_VERSION}-dev.${SHORT_SHA}"
-          npm version "$SNAPSHOT_VERSION" --no-git-tag-version
+          # PEP 440: the segment after ".dev" must be numeric-only, but a git
+          # SHA is hex (contains a-f). Use a "+g<sha>" local version segment
+          # instead — PEP 440 allows arbitrary alphanumerics after "+", and
+          # this mirrors the convention setuptools_scm/hatch-vcs use for
+          # dev builds off a git SHA (e.g. "2026.07.01+ga1b2c3d").
+          SNAPSHOT_VERSION="${PKG_VERSION}+g${SHORT_SHA}"
+          sed -i "s/^version = \".*\"/version = \"${SNAPSHOT_VERSION}\"/" pyproject.toml
           echo "Snapshot version: $SNAPSHOT_VERSION"
 
-      - name: Publish snapshot (dry-run on non-main)
-        run: npm publish --dry-run --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build snapshot
+        run: uv build
+
+      - name: Validate build (dry-run — no registry publish configured)
+        run: uv run --with twine twine check dist/*

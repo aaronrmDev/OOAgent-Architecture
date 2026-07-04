@@ -18,8 +18,8 @@ on:
     branches: [master, develop]
     types: [closed]
 
-env:
-  NODE_VERSION: '22'
+# Python version is pinned via .python-version (3.11); uv resolves it
+# automatically for every `uv sync` / `uv run` invocation below.
 
 jobs:
   # ── Expedited Critical Path ───────────────────────────────────────────────
@@ -28,33 +28,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+      - uses: astral-sh/setup-uv@v3
 
-      - run: npm ci
+      - run: uv sync --extra dev --extra otel
 
       - name: Type check
-        run: npm run typecheck
+        run: uv run mypy --strict
+
+      - name: Lint (ruff check)
+        run: uv run ruff check
+
+      - name: Format check (ruff format)
+        run: uv run ruff format --check
 
       - name: Build
-        run: npm run build
+        run: uv build
 
       # AI Safety Gate is MANDATORY even on hotfix — disasters don't respect urgency
       - name: AI Safety Gate (NON-NEGOTIABLE)
         run: |
           echo "⚡ HOTFIX: AI Safety Gate is mandatory even under time pressure."
           echo "   A security patch that introduces a new disaster is worse than no patch."
-          bash scripts/ai-safety-gate.sh
+          uv run bash scripts/ai-safety-gate.sh
 
       - name: Version check
-        run: bash scripts/version-check.sh
+        run: uv run bash scripts/version-check.sh
 
       - name: Core tests (fast subset)
-        run: npm test -- --passWithNoTests --testPathPattern="core|testing"
-        env:
-          NODE_OPTIONS: --experimental-vm-modules
+        run: PYTHONPATH=src uv run pytest tests/core tests/test_null_context.py tests/test_telemetry.py -v
 
   # ── Verify hotfix is branched from master ─────────────────────────────────
   base-check:
