@@ -156,10 +156,13 @@ class OOAgent(LLMAgent[Query, Artifact]):
             self._provenance.clear()
             self._state.transition("GATHERING")
 
-            context = self._ctx_registry.resolve(query)
-            self._state.set_context(context.name)
-            pipeline = self._pipeline.extend(context.pipeline())
-            snapshot = self._state.snapshot()
+            try:
+                context = self._ctx_registry.resolve(query)
+                self._state.set_context(context.name)
+                pipeline = self._pipeline.extend(context.pipeline())
+                snapshot = self._state.snapshot()
+            except Exception as err:
+                return self._handle_unrecoverable_failure(err, None)
 
             self._state.transition("MODELING")
             try:
@@ -180,33 +183,36 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 return self._handle_failure(err, context, snapshot.id)
 
             self._state.transition("DELIVERING")
-            format: ArtifactFormat = (
-                query.format
-                or (context.artifact_preferences().preferred_formats or ["text"])[0]
-            )
-            artifact = self._artifact_factory.build(
-                solution, format, context.artifact_preferences()
-            )
-            enriched = self._decorator.apply(artifact, self._provenance.dump())
+            try:
+                format: ArtifactFormat = (
+                    query.format
+                    or (context.artifact_preferences().preferred_formats or ["text"])[0]
+                )
+                artifact = self._artifact_factory.build(
+                    solution, format, context.artifact_preferences()
+                )
+                enriched = self._decorator.apply(artifact, self._provenance.dump())
 
-            cmd = Command(
-                id=str(uuid.uuid4()),
-                query=query,
-                solution=solution,
-                context_name=context.name,
-                trace=self._state.trace,
-                timestamp=time.time(),
-            )
-            self._state.commit(cmd)
-            self._state.reset()
+                cmd = Command(
+                    id=str(uuid.uuid4()),
+                    query=query,
+                    solution=solution,
+                    context_name=context.name,
+                    trace=self._state.trace,
+                    timestamp=time.time(),
+                )
+                self._state.commit(cmd)
+                self._state.reset()
 
-            self._telemetry.event(
-                "turn.complete",
-                {"context": context.name, "format": format, "turn": self._state.turn},
-            )
+                self._telemetry.event(
+                    "turn.complete",
+                    {"context": context.name, "format": format, "turn": self._state.turn},
+                )
 
-            self._lifecycle.record_llm_success()
-            return enriched
+                self._lifecycle.record_llm_success()
+                return enriched
+            except Exception as err:
+                return self._handle_unrecoverable_failure(err, context)
 
         return await self._telemetry.span("agent.turn", _turn)
 
@@ -294,6 +300,23 @@ class OOAgent(LLMAgent[Query, Artifact]):
         else:
             artifact = self._artifact_factory.build_error(str(err), context.name)
         self._state.transition("DELIVERING")
+        self._state.reset()
+        return artifact
+
+    def _handle_unrecoverable_failure(
+        self, err: Exception, context: IDomainContext | None
+    ) -> Artifact:
+        """Recovers from failures in phases that have no legal FSM path to
+        FAILURE (context resolution during GATHERING's un-guarded prelude,
+        and the DELIVERING block itself, per VALID_TRANSITIONS in state.py —
+        `DELIVERING: {IDLE}` is the only legal exit). `reset()` force-assigns
+        `_fsm = IDLE` unconditionally, bypassing the transition-legality
+        check, which is the only way to safely recover from any state."""
+        context_name = context.name if context is not None else "unknown"
+        if isinstance(err, ScopeExitError):
+            artifact = self._artifact_factory.build_scope_exit(context_name, err.query)
+        else:
+            artifact = self._artifact_factory.build_error(str(err), context_name)
         self._state.reset()
         self._lifecycle.record_llm_failure()
         return artifact
