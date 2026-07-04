@@ -2050,7 +2050,7 @@ git commit -m "feat: port core/lifecycle.ts to Python (LifecycleManager + Circui
 from __future__ import annotations
 
 from ooagent.core.orchestrator import MultiAgentOrchestrator, SignalBus
-from ooagent.core.protocols import ArtifactPolicy, IDomainContext, ProblemClass, Query, Term
+from ooagent.core.protocols import ArtifactPolicy, IDomainContext, ProblemClass, Query
 
 
 class _StubContext(IDomainContext):
@@ -2272,7 +2272,7 @@ class MultiAgentOrchestrator(IOrchestrator):
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `PYTHONPATH=src python -m pytest tests/core/test_orchestrator.py -v`
-Expected: `5 passed`
+Expected: `4 passed`
 
 - [ ] **Step 5: Commit**
 
