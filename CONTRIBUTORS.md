@@ -32,22 +32,21 @@ All PRs target `develop`. See the [Gitflow diagram](#gitflow) below.
 
 This project is **specification-first**. Before writing implementation code:
 
-1. Draft the interface change in `core/protocols.ts` (or leave it unchanged)
-2. Write conformance tests in `testing/` (§17 CLAUDE.md)
+1. Draft the interface change in `src/ooagent/core/protocols.py` (or leave it unchanged)
+2. Write conformance tests in `tests/conformance/` (§17 CLAUDE.md)
 3. Implement the feature
 4. Run the full CI gate locally:
 
 ```bash
-npm run typecheck
-npm run build
+uv run mypy --strict
 bash scripts/ai-safety-gate.sh --verbose
 bash scripts/conformance-check.sh
-npm test
+uv run pytest tests/ -v
 ```
 
 ### 3. AI Safety Gate
 
-Every contribution **must pass all 10 AI Safety Guards** before merge.
+Every contribution **must pass all 13 AI Safety Guards** before merge.
 The guards are not advisory — they map directly to documented AI disasters
 that caused real harm. See `scripts/ai-safety-gate.sh` for details.
 
@@ -61,7 +60,7 @@ This project uses `YYYY.MM.NN` versioning:
 
 Example: `2026.06.01` is the first release of June 2026.
 
-Breaking changes to `core/protocols.ts` interfaces require a new month or year increment.
+Breaking changes to `core/protocols.py` interfaces require a new month or year increment.
 
 ---
 
@@ -92,14 +91,14 @@ develop ────────────────────────
 ### Domain Contexts (`contexts/`)
 
 Implement `IDomainContext` for a new problem domain. Required deliverables:
-- `contexts/<domain>/index.ts` — implementation
+- `contexts/<domain>/__init__.py` — implementation
 - `contexts/<domain>/CONTEXT.md` — domain specification (§14 CLAUDE.md)
 - Conformance tests (§17 CLAUDE.md)
 
 ### LLM Adapters (`adapters/llm/`)
 
 Implement `ILLMClient` for a new inference backend. Required deliverables:
-- `adapters/llm/<vendor>.ts`
+- `adapters/llm/<vendor>.py`
 - Conformance tests using `StubLLMClient` as reference
 - No changes to `core/`
 
@@ -107,21 +106,21 @@ Implement `ILLMClient` for a new inference backend. Required deliverables:
 
 Implement `ITool` extending `BaseTool`. Required deliverables:
 - Tool implementation
-- Conformance tests (valid args, ToolExecutionError, toVendorSpec)
+- Conformance tests (valid args, ToolExecutionError, to_vendor_spec)
 - If bundled as a plugin: implement `IPlugin` wrapping the tool
 
 ### Plugins (`plugins/`)
 
 Implement `IPlugin` extending `AbstractPlugin`. Required deliverables:
-- `plugins/<name>/index.ts`
-- `onRegister()`, `onDispose()`, `contributes()`
-- Only import from `core/protocols.js` (never core implementation files)
+- `plugins/<name>/__init__.py`
+- `on_register()`, `on_dispose()`, `contributes()`
+- Only import from `core/protocols.py` (never core implementation files)
 
 ---
 
 ## Code Standards
 
-- TypeScript strict mode — no `any`, no `as any` without justification
+- Python: `mypy --strict` — no untyped `def`s, no `# type: ignore` without justification
 - Zero comments on self-explanatory code; one-line max on non-obvious logic
 - No hardcoded secrets — environment variables only
 - Every async function must handle errors explicitly

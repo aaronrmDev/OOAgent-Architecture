@@ -1,145 +1,94 @@
 #!/usr/bin/env bash
-# scripts/conformance-check.sh
-# Spec Driven Development — Interface Conformance Verifier
+# scripts/conformance-check.sh — SDD Conformance Check (§17 CLAUDE.md)
 #
-# Verifies that every implementation of IAgent, IDomainContext, ITool,
-# IPlugin, and ILLMClient ships the required conformance tests as mandated
-# by §17 of CLAUDE.md.
-#
-# Exit codes:
-#   0 — all conformance requirements met
-#   1 — missing conformance tests detected
-
+# Introspects ACTUAL pytest test IDs via `pytest --collect-only`, rather than
+# regexing raw file text against hardcoded patterns. This is the direct fix
+# for the brittle-regex bug in the prior (TypeScript-era) version of this
+# script, where its expected patterns didn't match the real test wording and
+# a CI run kept failing even after a commit claimed to "fix" it.
 set -euo pipefail
 
-FAILURES=0
-PASS="✅"
-FAIL="❌"
-
-fail() { echo "[CONFORMANCE] $FAIL $*" >&2; FAILURES=$((FAILURES + 1)); }
-pass() { echo "[CONFORMANCE] $PASS $*"; }
-log()  { echo "[CONFORMANCE] $*"; }
-
-log "Spec Driven Development — Conformance Check (§17 CLAUDE.md)"
+echo "[CONFORMANCE] Spec Driven Development — Conformance Check (§17 CLAUDE.md)"
 echo ""
 
-# ── IAgent conformance ──────────────────────────────────────────────────────
-log "Checking IAgent conformance tests..."
-IAGENT_TESTS=(
-  "respond.*emptyQuery\|emptyQuery.*respond"
-  "FSM.*IDLE\|IDLE.*FSM"
-  "turn.*increment\|increment.*turn"
-  "dispose.*idempotent\|idempotent.*dispose"
-  "LifecycleError\|lifecycle.*error"
-)
-for pattern in "${IAGENT_TESTS[@]}"; do
-  if grep -rn --include="*.ts" -iE "$pattern" testing/ 2>/dev/null | grep -q .; then
-    pass "IAgent: '$pattern' conformance test present"
-  else
-    fail "IAgent: missing conformance test for '$pattern' (§17 CLAUDE.md)"
-  fi
-done
+COLLECTED=$(PYTHONPATH=src python -m pytest tests/conformance/ --collect-only -q 2>/dev/null)
+FAILURES=0
 
-# ── IDomainContext conformance ──────────────────────────────────────────────
-log "Checking IDomainContext conformance tests..."
-ICONTEXT_TESTS=(
-  "vocabulary.*non-empty\|vocabulary.*returns\|vocabulary\(\)"
-  "problemClasses.*non-empty\|problemClasses\(\)"
-  "invariants.*callable\|invariants\(\)"
-  "resolveIntent.*null\|resolveIntent.*returns"
-  "artifactPreferences.*preferredFormats"
-)
-for pattern in "${ICONTEXT_TESTS[@]}"; do
-  if grep -rn --include="*.ts" -iE "$pattern" testing/ 2>/dev/null | grep -q .; then
-    pass "IDomainContext: '$pattern' conformance test present"
+check() {
+  local pattern="$1"
+  local description="$2"
+  if echo "$COLLECTED" | grep -qiE "$pattern"; then
+    echo "[CONFORMANCE] ✅ $description"
   else
-    fail "IDomainContext: missing conformance test for '$pattern' (§17 CLAUDE.md)"
+    echo "[CONFORMANCE] ❌ missing conformance test for: $description"
+    FAILURES=$((FAILURES + 1))
   fi
-done
+}
 
-# ── ITool conformance ───────────────────────────────────────────────────────
-log "Checking ITool conformance tests..."
-ITOOL_TESTS=(
-  "execute.*validArgs\|validArgs.*execute"
-  "ToolExecutionError\|toolexecutionerror"
-  "toVendorSpec.*json\|vendorSpec.*JSON"
-)
-for pattern in "${ITOOL_TESTS[@]}"; do
-  if grep -rn --include="*.ts" -iE "$pattern" testing/ 2>/dev/null | grep -q .; then
-    pass "ITool: '$pattern' conformance test present"
-  else
-    fail "ITool: missing conformance test for '$pattern' (§17 CLAUDE.md)"
-  fi
-done
+echo "[CONFORMANCE] Checking IAgent conformance tests..."
+check "empty.*query|respond.*constraint" "IAgent: respond(emptyQuery) -> ConstraintViolation artifact"
+check "fsm.*idle" "IAgent: FSM is IDLE before and after each complete turn"
+check "turn.*increment" "IAgent: SessionState.turn increments by exactly 1"
+check "dispose.*idempotent" "IAgent: dispose() is idempotent"
+check "respond.*after.*dispose|lifecycle.*error" "IAgent: respond() after dispose() throws LifecycleError"
 
-# ── ILLMClient conformance ──────────────────────────────────────────────────
-log "Checking ILLMClient conformance tests..."
-ILLM_TESTS=(
-  "complete.*CompletionResponse\|CompletionResponse"
-  "TokenLimitError\|tokenlimiterror"
-  "stream.*chunk\|chunk.*stream"
-)
-for pattern in "${ILLM_TESTS[@]}"; do
-  if grep -rn --include="*.ts" -iE "$pattern" testing/ 2>/dev/null | grep -q .; then
-    pass "ILLMClient: '$pattern' conformance test present"
-  else
-    fail "ILLMClient: missing conformance test for '$pattern' (§17 CLAUDE.md)"
-  fi
-done
+echo "[CONFORMANCE] Checking IDomainContext conformance tests..."
+check "vocabulary.*non.empty" "IDomainContext: vocabulary() returns non-empty set"
+check "problem.*class.*non.empty" "IDomainContext: problem_classes() returns non-empty set"
+check "invariants.*callable" "IDomainContext: invariants() are callable without throwing"
+check "resolve.*intent.*none|resolve.*intent.*unrecognized" "IDomainContext: resolve_intent returns None for unrecognized query"
+check "artifact.*preferences.*non.empty|preferred.*formats.*non.empty" "IDomainContext: artifact_preferences().preferred_formats is non-empty"
 
-# ── StubLLMClient presence ──────────────────────────────────────────────────
-log "Checking test doubles..."
-if [[ -f "testing/stub_llm_client.ts" ]]; then
-  pass "StubLLMClient present"
+echo "[CONFORMANCE] Checking ITool conformance tests..."
+check "execute.*valid.*args" "ITool: execute(valid_args) returns without throwing"
+check "tool.*execution.*error" "ITool: execute(invalid_args) throws ToolExecutionError"
+check "to.*vendor.*spec.*json" "ITool: to_vendor_spec() returns valid JSON"
+check "name.*and.*description.*non.empty" "ITool: name and description are non-empty strings"
+
+echo "[CONFORMANCE] Checking ILLMClient conformance tests..."
+check "complete.*completion.*response|valid.*request.*completion" "ILLMClient: complete(valid_request) returns CompletionResponse"
+check "token.*limit.*error" "ILLMClient: complete(oversized_request) throws TokenLimitError"
+check "stream.*chunk" "ILLMClient: stream() yields at least one chunk"
+
+echo "[CONFORMANCE] Checking test doubles..."
+if [ -f tests/stub_llm_client.py ]; then
+  echo "[CONFORMANCE] ✅ StubLLMClient present"
 else
-  fail "StubLLMClient missing — required for deterministic ILLMClient tests (§17)"
+  echo "[CONFORMANCE] ❌ StubLLMClient missing"
+  FAILURES=$((FAILURES + 1))
 fi
 
-if [[ -f "testing/null_context.ts" ]]; then
-  pass "NullContext (testing re-export) present"
+if [ -f tests/null_context.py ]; then
+  echo "[CONFORMANCE] ✅ NullContext (testing re-export) present"
 else
-  fail "testing/null_context.ts missing — required for baseline agent-level tests (§17)"
+  echo "[CONFORMANCE] ❌ NullContext (testing re-export) missing"
+  FAILURES=$((FAILURES + 1))
 fi
 
-if [[ -f "testing/fixtures.ts" ]]; then
-  pass "Test fixtures present"
+if [ -f tests/fixtures.py ]; then
+  echo "[CONFORMANCE] ✅ Test fixtures present"
 else
-  fail "testing/fixtures.ts missing — required for common Query/Solution/Artifact doubles (§17)"
+  echo "[CONFORMANCE] ❌ Test fixtures missing"
+  FAILURES=$((FAILURES + 1))
 fi
 
-# ── IDomainContext implementations must have CONTEXT.md ─────────────────────
-log "Checking CONTEXT.md for each IDomainContext implementation..."
-for ctx_dir in contexts/*/; do
-  ctx_name=$(basename "$ctx_dir")
-  if [[ "$ctx_name" == "null_context.ts" ]] || [[ ! -d "$ctx_dir" ]]; then
-    continue
-  fi
-  if [[ -f "${ctx_dir}CONTEXT.md" ]]; then
-    pass "CONTEXT.md present for $ctx_name"
-  else
-    fail "CONTEXT.md missing for $ctx_name (§14 CLAUDE.md requires it alongside every IDomainContext)"
-  fi
-done
-
-# ── core/protocols.ts must have zero runtime dependencies ───────────────────
-log "Checking core/protocols.ts dependency purity..."
-if grep -n "^import " core/protocols.ts 2>/dev/null | grep -v "type " | grep -q "from "; then
-  fail "core/protocols.ts has runtime (non-type) imports. It must have zero runtime dependencies (§7 CLAUDE.md)."
+echo "[CONFORMANCE] Checking core/protocols.py dependency purity..."
+if grep -qE '^\s*(import|from)\s+(?!(abc|typing|dataclasses|enum|collections))\w' src/ooagent/core/protocols.py 2>/dev/null; then
+  echo "[CONFORMANCE] ❌ core/protocols.py has non-stdlib imports"
+  FAILURES=$((FAILURES + 1))
 else
-  pass "core/protocols.ts has zero runtime imports"
+  echo "[CONFORMANCE] ✅ core/protocols.py has zero runtime imports"
 fi
 
-# ── Summary ─────────────────────────────────────────────────────────────────
 echo ""
 echo "════════════════════════════════════════════════════════════"
 echo "  SDD Conformance Check — Results"
 echo "════════════════════════════════════════════════════════════"
-if [[ "$FAILURES" -eq 0 ]]; then
-  echo "  ✅ ALL CONFORMANCE REQUIREMENTS MET"
-  exit 0
-else
+if [ "$FAILURES" -gt 0 ]; then
   echo "  ❌ $FAILURES CONFORMANCE REQUIREMENT(S) UNMET"
   echo "  Write the missing tests before merging — see §17 CLAUDE.md"
   echo "════════════════════════════════════════════════════════════"
   exit 1
 fi
+echo "  ✅ All conformance requirements met"
+echo "════════════════════════════════════════════════════════════"

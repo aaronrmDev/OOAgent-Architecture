@@ -1,0 +1,154 @@
+name: CI Auto-Fix
+
+# Triggers automatically when CI Core fails on develop or master.
+# Detects known fixable patterns, applies them, and opens a PR.
+# Non-fixable failures open a GitHub Issue with a diagnostic report.
+
+on:
+  workflow_run:
+    workflows: ["CI Core"]
+    types: [completed]
+    branches: [develop, master, 'feature/**', 'release/**', 'hotfix/**']
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  FIX_BRANCH: fix/ci-autofix-${{ github.event.workflow_run.head_sha }}
+
+jobs:
+  autofix:
+    name: Detect and Auto-Fix CI Failures
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout failing commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra otel
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "ci-autofix[bot]"
+          git config user.email "ci-autofix@ooagent.dev"
+
+      # ── Diagnosis ─────────────────────────────────────────────────────────
+      - name: Run full diagnosis
+        id: diagnosis
+        run: |
+          FIXES_APPLIED=0
+          REPORT=""
+
+          # ── Check 1: bash wc -l whitespace (Guards 6c, 8b, 10a, etc.) ───
+          if grep -q "| wc -l || echo" scripts/ai-safety-gate.sh 2>/dev/null; then
+            echo "FOUND: bash wc -l whitespace bug"
+            sed -i 's/| wc -l || echo "0")/| wc -l | xargs)/g' scripts/ai-safety-gate.sh
+            FIXES_APPLIED=$((FIXES_APPLIED + 1))
+            REPORT="${REPORT}\n- ✅ Fixed: \`wc -l\` whitespace bug in \`ai-safety-gate.sh\` (Guards 6c/8b/10a)"
+          fi
+
+          # ── Check 2: pip-audit vulnerabilities ───────────────────────────
+          # No safe equivalent to `npm audit fix --force` exists for uv-managed
+          # lockfiles (there is no automated resolver upgrade that is safe to
+          # apply unattended), so a detected vulnerability is reported as a
+          # manual fix rather than auto-applied.
+          AUDIT_JSON=$(uv run --with pip-audit pip-audit --format=json 2>/dev/null || echo "{}")
+          HIGH=$(echo "$AUDIT_JSON" | uv run python -c \
+            "import sys,json; d=json.load(sys.stdin); \
+             deps=d if isinstance(d,list) else d.get('dependencies',[]); \
+             print(sum(len(x.get('vulns',[])) for x in deps))" 2>/dev/null || echo "0")
+          if [ "$HIGH" -gt "0" ]; then
+            echo "FOUND: $HIGH pip-audit vulnerabilit(y/ies)"
+            REPORT="${REPORT}\n- ❌ Manual fix required: ${HIGH} known vulnerabilit(y/ies) found by pip-audit — upgrade the affected package(s) and re-run \`uv lock\`"
+          fi
+
+          # ── Check 3: plugins missing on_dispose() ─────────────────────────
+          # Auto-inserting a method body is unsafe for Python (indentation is
+          # significant; there is no closing-brace anchor to sed against like
+          # the TS-era `}` insertion), so this is detection-only.
+          MISSING_DISPOSE=$(grep -rL "on_dispose" src/ooagent/plugins/*/__init__.py 2>/dev/null | tr '\n' ',')
+          if [ -n "$MISSING_DISPOSE" ]; then
+            echo "FOUND: plugins missing on_dispose(): $MISSING_DISPOSE"
+            REPORT="${REPORT}\n- ❌ Manual fix required: add \`on_dispose()\` override to: ${MISSING_DISPOSE}"
+          fi
+
+          # ── Check 4: mypy --strict errors ────────────────────────────────
+          MYPY_OUTPUT=$(uv run mypy --strict 2>&1) || true
+          MYPY_ERRORS=$(echo "$MYPY_OUTPUT" | grep -c "error:" || echo "0")
+          if [ "$MYPY_ERRORS" -gt "0" ]; then
+            REPORT="${REPORT}\n- ❌ Manual fix required: ${MYPY_ERRORS} mypy error(s) — auto-fix not possible"
+            echo "FOUND: mypy errors — cannot auto-fix"
+          fi
+
+          # ── Check 5: conformance test patterns missing ────────────────────
+          CONF_OUTPUT=$(uv run bash scripts/conformance-check.sh 2>&1) || true
+          CONF_FAILS=$(echo "$CONF_OUTPUT" | grep -c "❌" || echo "0")
+          if [ "$CONF_FAILS" -gt "0" ]; then
+            REPORT="${REPORT}\n- ❌ Manual fix required: ${CONF_FAILS} conformance test(s) missing — see §17 CLAUDE.md"
+          fi
+
+          echo "fixes_applied=$FIXES_APPLIED" >> "$GITHUB_OUTPUT"
+          echo "report<<EOF" >> "$GITHUB_OUTPUT"
+          printf "%b" "$REPORT" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "has_manual_failures=$(echo "$REPORT" | grep -c "Manual fix" || echo 0)" >> "$GITHUB_OUTPUT"
+
+      # ── Commit and PR if fixes were applied ───────────────────────────────
+      - name: Commit auto-fixes
+        if: ${{ steps.diagnosis.outputs.fixes_applied != '0' }}
+        run: |
+          SOURCE_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          FIX_BRANCH="fix/ci-autofix-$(echo '${{ github.event.workflow_run.head_sha }}' | head -c 8)"
+
+          git checkout -b "$FIX_BRANCH"
+          git add -A
+          git commit -m "fix(ci-autofix): auto-repair detected CI failures
+
+          Applied fixes:
+          ${{ steps.diagnosis.outputs.report }}
+
+          Triggered by: ${{ github.event.workflow_run.html_url }}
+          Source branch: ${SOURCE_BRANCH}
+
+          Co-Authored-By: ci-autofix[bot] <ci-autofix@ooagent.dev>"
+
+          git push origin "$FIX_BRANCH"
+
+          TARGET="${SOURCE_BRANCH:-develop}"
+          gh pr create \
+            --base "$TARGET" \
+            --head "$FIX_BRANCH" \
+            --title "fix(ci-autofix): auto-repair CI failures on ${TARGET}" \
+            --label "ci:autofix" \
+            --body "$(printf '## CI Auto-Fix\n\nThis PR was opened automatically by the **CI Auto-Fix** workflow after detecting failures on branch `'"${TARGET}"'`.\n\n### Fixes applied\n\n'"${{ steps.diagnosis.outputs.report }}"'\n\n### Source run\n\n${{ github.event.workflow_run.html_url }}\n\n---\n> Review before merging. Auto-fixes cover: bash syntax. pip-audit findings, missing on_dispose() overrides, and mypy/conformance failures are reported but require a manual fix.')"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Open issue for manual failures ───────────────────────────────────
+      - name: Open issue for manual failures
+        if: ${{ steps.diagnosis.outputs.has_manual_failures != '0' }}
+        run: |
+          SOURCE_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          gh issue create \
+            --title "CI failure on ${SOURCE_BRANCH} requires manual fix" \
+            --label "ci:manual-fix,bug" \
+            --body "$(printf '## CI Failure — Manual Fix Required\n\nBranch: `'"${SOURCE_BRANCH}"'`\nRun: ${{ github.event.workflow_run.html_url }}\n\n### Diagnosis\n\n'"${{ steps.diagnosis.outputs.report }}"'\n\n### How to fix\n\n1. Review the failing run linked above\n2. Apply fixes locally on `'"${SOURCE_BRANCH}"'`\n3. Push — CI Auto-Fix will validate the next run')"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── No-op log when nothing to fix ─────────────────────────────────────
+      - name: Nothing to auto-fix
+        if: ${{ steps.diagnosis.outputs.fixes_applied == '0' && steps.diagnosis.outputs.has_manual_failures == '0' }}
+        run: echo "No auto-fixable patterns found. Failure may be transient — re-run CI manually."
