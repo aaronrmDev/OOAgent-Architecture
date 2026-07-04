@@ -122,98 +122,215 @@ one concern. `OOAgent` is a **composition root**, not a monolith.
 ## 5. Core Interface Catalog
 
 Every interface is generic, dependency-free, and implementable in any typed
-language (Python, TypeScript, Go, Rust, Java, C#, etc.).
+language (Python, TypeScript, Go, Rust, Java, C#, etc.). The canonical
+implementation lives in `src/ooagent/core/protocols.py`; the shapes below are
+that file's public surface.
 
-```typescript
-// ── Generics notation (TypeScript-style pseudocode) ─────────────────────────
+```python
+# ── ABC notation — mirrors src/ooagent/core/protocols.py ────────────────────
 
-interface IAgent<TQuery, TResponse> {
-  respond(query: TQuery): Promise<TResponse>
-  readonly agentId: string
-  readonly state:   ISessionState
-}
+class IAgent(ABC, Generic[TQuery, TResponse]):
+    @abstractmethod
+    async def respond(self, query: TQuery) -> TResponse: ...
 
-interface ILLMClient {
-  complete(request: CompletionRequest): Promise<CompletionResponse>
-  stream(request: CompletionRequest):   AsyncIterator<CompletionChunk>
-  readonly modelId:    string
-  readonly maxTokens:  number
-  readonly supportsTools: boolean
-}
+    @property
+    @abstractmethod
+    def agent_id(self) -> str: ...
 
-interface IDomainContext {
-  readonly name:    string
-  readonly version: string
-  vocabulary():         Set<Term>
-  problemClasses():     Set<ProblemClass>
-  solvers():            Map<string, ISolver>
-  invariants():         Invariant[]
-  pipeline():           PipelineStep[]
-  antiPatterns():       AntiPattern[]
-  requiredInputs(pc: ProblemClass): InputSpec[]
-  artifactPreferences(): ArtifactPolicy
-  systemPromptExtension(): string
-  resolveIntent(query: Query): ProblemClass | null
-}
+    @property
+    @abstractmethod
+    def state(self) -> "ISessionState": ...
 
-interface ISolver {
-  canSolve(problemClass: string): boolean
-  solve(query: Query, ctx: IDomainContext): Promise<Solution>
-}
 
-interface ITool {
-  readonly name:        string
-  readonly description: string
-  inputSchema():        JSONSchema
-  execute(args: Record<string, unknown>): Promise<unknown>
-  toVendorSpec(vendor: LLMVendor): VendorToolSpec
-}
+class ILLMClient(ABC):
+    @abstractmethod
+    async def complete(self, request: CompletionRequest) -> CompletionResponse: ...
 
-interface IPlugin {
-  readonly pluginId:   string
-  readonly version:    string
-  onRegister(agent: IAgent<unknown, unknown>): void
-  onDispose():         void
-  contributes(): PluginContributions   // tools | contexts | solvers | decorators
-}
+    @abstractmethod
+    def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]: ...
 
-interface ILifecycle {
-  initialize(config: IAgentConfig): Promise<void>
-  healthCheck():      Promise<HealthStatus>
-  dispose():          Promise<void>         // releases all managed resources
-  readonly isReady:   boolean
-}
+    @property
+    @abstractmethod
+    def model_id(self) -> str: ...
 
-interface ISessionState {
-  readonly fsm:           AgentFSMState
-  readonly turn:          number
-  readonly contextName:   string
-  transition(to: AgentFSMState): void
-  snapshot():             Memento
-  restore(id: string):    void
-  commit(cmd: Command):   void
-  subscribe(obs: StateObserver): Unsubscribe
-}
+    @property
+    @abstractmethod
+    def max_tokens(self) -> int: ...
 
-interface ITelemetryProvider {
-  span<T>(name: string, fn: () => Promise<T>): Promise<T>
-  counter(name: string, delta?: number): void
-  gauge(name: string, value: number): void
-  histogram(name: string, value: number): void
-  event(name: string, payload: Record<string, unknown>): void
-}
+    @property
+    @abstractmethod
+    def supports_tools(self) -> bool: ...
 
-interface IArtifactFactory {
-  build(solution: Solution, format: ArtifactFormat, policy: ArtifactPolicy): Artifact
-  buildError(violation: string, ctx: string): Artifact
-  buildMissingInputs(missing: InputSpec[], ctx: string): Artifact
-  buildScopeExit(ctx: string, query: string): Artifact
-}
 
-interface IOrchestrator {
-  dispatch(query: Query, contexts: IDomainContext[]): Promise<Solution[]>
-  synthesize(solutions: Solution[], original: Query): Promise<Solution>
-}
+class IDomainContext(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def version(self) -> str: ...
+
+    @abstractmethod
+    def vocabulary(self) -> set[Term]: ...
+
+    @abstractmethod
+    def problem_classes(self) -> set[ProblemClass]: ...
+
+    @abstractmethod
+    def solvers(self) -> dict[str, "ISolver"]: ...
+
+    @abstractmethod
+    def invariants(self) -> list[Invariant]: ...
+
+    @abstractmethod
+    def pipeline(self) -> list[PipelineStep]: ...
+
+    @abstractmethod
+    def anti_patterns(self) -> list[AntiPattern]: ...
+
+    @abstractmethod
+    def required_inputs(self, pc: ProblemClass) -> list[InputSpec]: ...
+
+    @abstractmethod
+    def artifact_preferences(self) -> ArtifactPolicy: ...
+
+    @abstractmethod
+    def system_prompt_extension(self) -> str: ...
+
+    @abstractmethod
+    def resolve_intent(self, query: Query) -> ProblemClass | None: ...
+
+
+class ISolver(ABC):
+    @abstractmethod
+    def can_solve(self, problem_class: str) -> bool: ...
+
+    @abstractmethod
+    async def solve(self, query: Query, ctx: IDomainContext) -> Solution: ...
+
+
+class ITool(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def description(self) -> str: ...
+
+    @abstractmethod
+    def input_schema(self) -> JSONSchema: ...
+
+    @abstractmethod
+    async def execute(self, args: dict[str, Any]) -> Any: ...
+
+    @abstractmethod
+    def to_vendor_spec(self, vendor: LLMVendor) -> VendorToolSpec: ...
+
+
+class IPlugin(ABC):
+    @property
+    @abstractmethod
+    def plugin_id(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def version(self) -> str: ...
+
+    @abstractmethod
+    def on_register(self, agent: "IAgent[Any, Any]") -> None: ...
+
+    @abstractmethod
+    def on_dispose(self) -> None: ...
+
+    @abstractmethod
+    def contributes(self) -> PluginContributions: ...  # tools | contexts | solvers | decorators
+
+
+class ILifecycle(ABC):
+    @abstractmethod
+    async def initialize(self, config: AgentConfig) -> None: ...
+
+    @abstractmethod
+    async def health_check(self) -> HealthStatus: ...
+
+    @abstractmethod
+    async def dispose(self) -> None: ...  # releases all managed resources
+
+    @property
+    @abstractmethod
+    def is_ready(self) -> bool: ...
+
+
+class ISessionState(ABC):
+    @property
+    @abstractmethod
+    def fsm(self) -> AgentFSMState: ...
+
+    @property
+    @abstractmethod
+    def turn(self) -> int: ...
+
+    @property
+    @abstractmethod
+    def context_name(self) -> str: ...
+
+    @abstractmethod
+    def transition(self, to: AgentFSMState) -> None: ...
+
+    @abstractmethod
+    def snapshot(self) -> Memento: ...
+
+    @abstractmethod
+    def restore(self, id: str) -> None: ...
+
+    @abstractmethod
+    def commit(self, cmd: Command) -> None: ...
+
+    @abstractmethod
+    def subscribe(self, obs: StateObserver) -> Unsubscribe: ...
+
+
+class ITelemetryProvider(ABC):
+    @abstractmethod
+    async def span(self, name: str, fn: Callable[[], Awaitable[T]]) -> T: ...
+
+    @abstractmethod
+    def counter(self, name: str, delta: float = 1) -> None: ...
+
+    @abstractmethod
+    def gauge(self, name: str, value: float) -> None: ...
+
+    @abstractmethod
+    def histogram(self, name: str, value: float) -> None: ...
+
+    @abstractmethod
+    def event(self, name: str, payload: dict[str, Any]) -> None: ...
+
+
+class IArtifactFactory(ABC):
+    @abstractmethod
+    def build(
+        self, solution: Solution, format: ArtifactFormat, policy: ArtifactPolicy
+    ) -> Artifact: ...
+
+    @abstractmethod
+    def build_error(self, violation: str, ctx: str) -> Artifact: ...
+
+    @abstractmethod
+    def build_missing_inputs(self, missing: list[InputSpec], ctx: str) -> Artifact: ...
+
+    @abstractmethod
+    def build_scope_exit(self, ctx: str, query: str) -> Artifact: ...
+
+
+class IOrchestrator(ABC):
+    @abstractmethod
+    async def dispatch(self, query: Query, contexts: list[IDomainContext]) -> list[Solution]: ...
+
+    @abstractmethod
+    async def synthesize(self, solutions: list[Solution], original: Query) -> Solution: ...
 ```
 
 ---
@@ -257,56 +374,61 @@ be registered with `LifecycleManager` at construction time.
 ## 7. Package & Project Structure
 
 ```
-ooagent/
+src/ooagent/
 ├── core/
-│   ├── protocols.ts          # All interface + type definitions (zero dependencies)
-│   ├── agent.ts              # OOAgent — composition root, Template Method
-│   ├── state.ts              # SessionState, FSM, Memento, Command
-│   ├── pipeline.ts           # ResponsePipeline (CoR), ConstraintEngine
-│   ├── artifacts.ts          # ArtifactFactory, ProvenanceTracker, ResponseDecorator
-│   ├── registry.ts           # ContextRegistry, ToolRegistry, PluginRegistry
-│   ├── lifecycle.ts          # LifecycleManager, HealthStatus, CircuitBreaker
-│   └── orchestrator.ts       # MultiAgentOrchestrator, SignalBus
+│   ├── protocols.py          # All interface + type definitions (zero dependencies)
+│   ├── agent.py              # AbstractAgent, LLMAgent, OOAgent — composition root, Template Method
+│   ├── state.py              # SessionState, FSM, Memento, Command
+│   ├── pipeline.py           # ResponsePipeline (CoR), ConstraintEngine
+│   ├── artifacts.py          # ArtifactFactory, ProvenanceTracker, ResponseDecorator
+│   ├── registry.py           # ContextRegistry (Singleton), ToolRegistry, PluginRegistry
+│   ├── lifecycle.py          # LifecycleManager, HealthStatus, CircuitBreaker
+│   └── orchestrator.py       # MultiAgentOrchestrator, SignalBus
 │
 ├── adapters/
 │   ├── llm/
-│   │   ├── anthropic.ts      # ILLMClient → Anthropic SDK
-│   │   ├── openai.ts         # ILLMClient → OpenAI SDK
-│   │   ├── gemini.ts         # ILLMClient → Gemini SDK
-│   │   ├── ollama.ts         # ILLMClient → Ollama (local)
-│   │   └── caching_proxy.ts  # CachingLLMProxy (Proxy pattern)
-│   └── tools/
-│       ├── base.ts           # BaseTool abstract class
-│       └── adapter.ts        # ToolAdapter (Adapter pattern)
+│   │   ├── anthropic.py      # ILLMClient → Anthropic Messages API
+│   │   ├── openai.py         # ILLMClient → OpenAI Chat API
+│   │   ├── gemini.py         # ILLMClient → Gemini API
+│   │   ├── ollama.py         # ILLMClient → Ollama (local)
+│   │   └── caching_proxy.py  # CachingLLMProxy, ThrottlingLLMProxy (Proxy pattern)
+│   ├── tools/
+│   │   ├── base.py           # BaseTool abstract class
+│   │   └── adapter.py        # ToolAdapter (Adapter pattern)
+│   └── data/                 # IDataStore protocol + in-memory implementation
 │
 ├── contexts/
-│   ├── null_context.ts       # NullContext (Null Object)
+│   ├── null_context.py       # NullContext (Null Object)
 │   └── [domain]/             # User-supplied IDomainContext implementations
 │       └── CONTEXT.md        # Domain specification (see §14)
 │
 ├── plugins/
-│   ├── registry.ts           # PluginRegistry
+│   ├── base_plugin.py        # AbstractPlugin — reduces IPlugin boilerplate
+│   ├── logging/ audit/ cache/ rate_limit/ scope_guard/ security/ opentelemetry/
+│   ├── tool_kit/              # CalculatorTool, DatetimeTool, HttpFetchTool
 │   └── [plugin-name]/        # User-supplied IPlugin implementations
 │
-├── telemetry/
-│   ├── null_telemetry.ts     # NullTelemetry (Null Object — default)
-│   ├── otel.ts               # OpenTelemetry IITelemetryProvider
-│   └── console.ts            # ConsoleTelemery (development)
-│
-└── testing/
-    ├── stub_llm_client.ts    # Deterministic ILLMClient for unit tests
-    ├── null_context.ts       # Re-exports NullContext
-    └── fixtures.ts           # Common Query/Solution/Artifact test doubles
+└── telemetry/
+    ├── null_telemetry.py     # NullTelemetry (Null Object — default)
+    ├── otel.py               # OpenTelemetryProvider (ITelemetryProvider)
+    └── console.py            # ConsoleTelemetry (development)
+
+tests/
+├── core/ adapters/ plugins/   # Unit tests mirroring src/ooagent/ package-for-package
+├── conformance/               # IAgent / IDomainContext / ITool / ILLMClient conformance suites (§17)
+├── stub_llm_client.py         # Deterministic ILLMClient for unit tests
+├── null_context.py            # Re-exports NullContext
+└── fixtures.py                 # Common Query/Solution/Artifact test doubles
 ```
 
 **Package management rules:**
-- `core/protocols.ts` has **zero runtime dependencies** — only type imports.
-- `core/` depends only on `core/protocols.ts`. No adapter, no context, no plugin.
-- `adapters/` depends on `core/` and external SDKs — never on `contexts/` or `plugins/`.
-- `contexts/` depends on `core/protocols.ts` only.
-- `plugins/` depends on `core/protocols.ts` + any `adapters/` they need.
-- Circular imports are a build error (`eslint-plugin-import`, `ruff`, etc.).
-- Every package exports a single barrel (`index.ts`) with explicit re-exports.
+- `core/protocols.py` has **zero runtime dependencies** — only stdlib (`abc`, `dataclasses`, `typing`) imports.
+- `core/` depends only on `core/protocols.py`. No adapter, no context, no plugin.
+- `adapters/` depends on `core/` and external packages (`httpx`, `opentelemetry-*`) — never on `contexts/` or `plugins/`.
+- `contexts/` depends on `core/protocols.py` only.
+- `plugins/` depends on `core/protocols.py` + any `adapters/` they need.
+- Circular imports are caught by `mypy --strict` and `ruff` (import-sort/unused-import rules) in CI.
+- Every package exports its public surface via `__init__.py`.
 - Versioning: `core/` is semver-stable. Breaking changes to `IAgent`, `IDomainContext`,
   or `ILLMClient` require a major version bump.
 
@@ -316,25 +438,29 @@ ooagent/
 
 ### 8a. Specializing the Agent
 
-```typescript
-// Extend OOAgent only to override a single Template Method step.
-// Never override respond() directly.
+```python
+# Extend OOAgent only to override a single Template Method step.
+# Never override respond() directly.
 
-class StreamingAgent extends OOAgent {
-  // Override only the solve step to use streaming
-  protected override async _solve(q, ctx, extras): Promise<Solution> {
-    // use ILLMClient.stream() instead of .complete()
-  }
-}
+class StreamingAgent(OOAgent):
+    """Overrides only the solve step to use streaming."""
 
-class CachedAgent extends OOAgent {
-  // Inject a CachingLLMProxy at construction — no subclassing needed
-  // Prefer composition (Proxy) over inheritance for cross-cutting concerns.
-}
+    async def _solve(
+        self, query: Query, context: IDomainContext, extras: dict[str, Any]
+    ) -> Solution:
+        # use ILLMClient.stream() instead of .complete()
+        ...
 
-class EmbeddedAgent extends OOAgent<EmbeddedQuery, EmbeddedResponse> {
-  // Narrow the generics for a specialized query/response type
-}
+
+class CachedAgent(OOAgent):
+    """Inject a CachingLLMProxy at construction — no subclassing needed.
+    Prefer composition (Proxy) over inheritance for cross-cutting concerns."""
+
+
+class EmbeddedAgent(LLMAgent[EmbeddedQuery, EmbeddedResponse]):
+    """OOAgent itself is already concretely typed as LLMAgent[Query, Artifact]
+    (see core/agent.py) — to narrow TQuery/TResponse for a specialized
+    query/response pair, subclass LLMAgent directly rather than OOAgent."""
 ```
 
 **Rule:** prefer composition + injection over inheritance. Subclass only when
@@ -343,77 +469,82 @@ satisfy LSP: same preconditions, same postconditions, same invariants.
 
 ### 8b. Specializing the Context
 
-```typescript
-class MyDomainContext implements IDomainContext {
-  name    = "MyDomain"
-  version = "1.0"
-  // Implement all 10 methods.
-  // Ship this in contexts/my-domain/ with a CONTEXT.md.
-}
+```python
+class MyDomainContext(IDomainContext):
+    @property
+    def name(self) -> str:
+        return "MyDomain"
+
+    @property
+    def version(self) -> str:
+        return "1.0"
+
+    # Implement the remaining 10 methods (vocabulary, problem_classes, solvers,
+    # invariants, pipeline, anti_patterns, required_inputs,
+    # artifact_preferences, system_prompt_extension, resolve_intent).
+    # Ship this in contexts/my_domain/ with a CONTEXT.md.
 ```
 
 **Rule:** contexts are **closed for modification, open for composition**.
 If two domains partially overlap, compose them:
 
-```typescript
-class HybridContext implements IDomainContext {
-  constructor(
-    private readonly a: IDomainContext,
-    private readonly b: IDomainContext,
-  ) {}
+```python
+class HybridContext(IDomainContext):
+    def __init__(self, a: IDomainContext, b: IDomainContext) -> None:
+        self._a = a
+        self._b = b
 
-  vocabulary() { return new Set([...this.a.vocabulary(), ...this.b.vocabulary()]) }
-  invariants() { return [...this.a.invariants(), ...this.b.invariants()] }
-  // etc. — merge, not override
-}
+    def vocabulary(self) -> set[Term]:
+        return self._a.vocabulary() | self._b.vocabulary()
+
+    def invariants(self) -> list[Invariant]:
+        return [*self._a.invariants(), *self._b.invariants()]
+
+    # etc. — merge, not override
 ```
 
 ### 8c. Specializing Tools
 
-```typescript
-class MyTool implements ITool {
-  name        = "my_tool"
-  description = "..."
+```python
+class MyTool(BaseTool):
+    name = "my_tool"
+    description = "..."
 
-  inputSchema(): JSONSchema { return { ... } }
+    def input_schema(self) -> JSONSchema:
+        return {...}
 
-  async execute(args): Promise<unknown> {
-    // Validate args against inputSchema() before executing — always.
-    // Throw ToolExecutionError on failure — never return error strings.
-    // Be idempotent where possible.
-  }
+    async def execute(self, args: dict[str, Any]) -> Any:
+        self._validate_args(args)  # BaseTool helper — checks input_schema()'s "required" fields
+        # Raise ToolExecutionError on failure — never return error strings.
+        # Be idempotent where possible.
+        ...
 
-  toVendorSpec(vendor: LLMVendor): VendorToolSpec {
-    // Return the vendor-specific tool spec.
-    // BaseTool provides default implementations for known vendors.
-  }
-}
+    # to_vendor_spec() is provided by BaseTool for anthropic/openai/gemini/ollama.
+    # Override only if a vendor needs behavior BaseTool doesn't already cover.
 ```
 
 ### 8d. Plugin Contributions
 
-```typescript
-class MyPlugin implements IPlugin {
-  pluginId = "my-plugin"
-  version  = "1.0.0"
+```python
+class MyPlugin(AbstractPlugin):
+    plugin_id = "my-plugin"
+    version = "1.0.0"
 
-  onRegister(agent) {
-    // Register tools, contexts, solvers, or decorators here.
-    // Never hold a strong reference to agent — use WeakRef if needed.
-  }
+    def on_register(self, agent: "IAgent[Any, Any]") -> None:
+        # Register tools, contexts, solvers, or decorators here.
+        # Never hold a strong reference to agent — use weakref.ref if needed.
+        ...
 
-  onDispose() {
-    // Release all resources this plugin allocated.
-    // Must be idempotent — may be called multiple times.
-  }
+    def on_dispose(self) -> None:
+        # Release all resources this plugin allocated.
+        # Must be idempotent — may be called multiple times.
+        ...
 
-  contributes(): PluginContributions {
-    return {
-      tools:    [new MyTool()],
-      contexts: [new MyDomainContext()],
-    }
-  }
-}
+    def contributes(self) -> PluginContributions:
+        return PluginContributions(
+            tools=[MyTool()],
+            contexts=[MyDomainContext()],
+        )
 ```
 
 ---
@@ -453,49 +584,85 @@ on the context side knows about agent internals.
 
 ## 10. Response Protocol (Template Method)
 
-```typescript
-async respond(query: Query): Promise<Response> {
-  // Pre-condition: isReady === true
-  // Post-condition: returns non-null Response; SessionState.turn incremented
+```python
+async def respond(self, query: Query) -> Artifact:
+    """Template Method — §10 CLAUDE.md."""
+    # Pre-condition: is_ready is True
+    # Post-condition: returns non-null Artifact; SessionState.turn incremented
+    if not self._lifecycle.is_ready:
+        raise LifecycleError("Agent is not ready. Call initialize() first.")
 
-  this.provenance.clear()
-  this.state.transition(FSM.GATHERING)
+    async def _turn() -> Artifact:
+        self._provenance.clear()
+        self._state.transition("GATHERING")
 
-  const context  = this.ctxRegistry.resolve(query)           // IDomainContext
-  this.state.setContext(context.name)
-  const pipeline = this.pipeline.extend(context.pipeline())  // CoR
-  const snapshot = this.state.snapshot()                     // Memento
+        try:
+            context = self._ctx_registry.resolve(query)           # IDomainContext
+            self._state.set_context(context.name)
+            pipeline = self._pipeline.extend(context.pipeline())  # CoR
+            snapshot = self._state.snapshot()                     # Memento
+        except Exception as err:
+            # GATHERING's un-guarded prelude has no legal FSM path to FAILURE
+            # (see VALID_TRANSITIONS in state.py) — recover unconditionally.
+            return self._handle_unrecoverable_failure(err, None)
 
-  // MODELING: validate query
-  this.state.transition(FSM.MODELING)
-  const extras = await pipeline.run(query, context)
-  // ConstraintViolation → FSM.FAILURE → emit error artifact → return
+        # MODELING: validate query
+        self._state.transition("MODELING")
+        try:
+            extras = await pipeline.run(query, context)
+        except Exception as err:
+            return self._handle_failure(err, context, snapshot.id)
+        # ConstraintViolation → FSM.FAILURE → emit error artifact → return
 
-  // SOLVING: LLM + tool loop
-  this.state.transition(FSM.SOLVING)
-  const solution = await this.solve(query, context, extras)
-  // ScopeExitError  → FSM.FAILURE → emit scope-exit artifact → return
+        # SOLVING: LLM + tool loop
+        self._state.transition("SOLVING")
+        try:
+            solution = await self._solve(query, context, extras)
+        except Exception as err:
+            return self._handle_failure(err, context, snapshot.id)
+        # ScopeExitError → FSM.FAILURE → emit scope-exit artifact → return
 
-  // VALIDATING: domain invariants
-  this.state.transition(FSM.VALIDATING)
-  this.constraintEngine.assertAll(solution, context.invariants())
-  // ConstraintViolation → FSM.FAILURE → emit violation artifact → return
+        # VALIDATING: domain invariants
+        self._state.transition("VALIDATING")
+        try:
+            self._constraint_engine.assert_all(solution, context.invariants())
+        except Exception as err:
+            return self._handle_failure(err, context, snapshot.id)
+        # ConstraintViolation → FSM.FAILURE → emit violation artifact → return
 
-  // DELIVERING: build + decorate artifact
-  this.state.transition(FSM.DELIVERING)
-  const artifact = this.artifactFactory.build(solution, format, context.artifactPreferences())
-  const enriched = this.decorator.apply(artifact, this.provenance.dump())
+        # DELIVERING: build + decorate artifact
+        self._state.transition("DELIVERING")
+        try:
+            format = query.format or context.artifact_preferences().preferred_formats[0]
+            artifact = self._artifact_factory.build(solution, format, context.artifact_preferences())
+            enriched = self._decorator.apply(artifact, self._provenance.dump())
 
-  this.state.commit(Command.fromTurn(query, solution, context.name, this.state.trace))
-  this.state.reset()                                         // → FSM.IDLE
+            cmd = Command(
+                id=str(uuid.uuid4()),
+                query=query,
+                solution=solution,
+                context_name=context.name,
+                trace=self._state.trace,
+                timestamp=time.time(),
+            )
+            self._state.commit(cmd)
+            self._state.reset()                                   # → FSM.IDLE
 
-  this.telemetry.event("turn.complete", { context: context.name, format, tokens: ... })
-  return enriched
-  // Invariants: FSM === IDLE; turn incremented by 1; provenance cleared
-}
+            self._telemetry.event("turn.complete", {"context": context.name, "format": format})
+            return enriched
+            # Invariants: FSM == IDLE; turn incremented by 1; provenance cleared
+        except Exception as err:
+            # DELIVERING's only legal exit is IDLE (no FAILURE transition
+            # defined for it either) — same unconditional recovery path as
+            # the GATHERING prelude above. Added during this port's own code
+            # review; a real improvement over the original TS design, which
+            # had no recovery path for failures in these two phases.
+            return self._handle_unrecoverable_failure(err, context)
+
+    return await self._telemetry.span("agent.turn", _turn)
 ```
 
-**No step is skipped. No emission occurs without `assertAll` passing.**
+**No step is skipped. No emission occurs without `assert_all` passing.**
 
 ---
 
