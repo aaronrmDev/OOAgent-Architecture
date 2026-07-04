@@ -89,7 +89,12 @@ jobs:
         run: |
           PKG_VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           SHORT_SHA=$(echo "${{ github.sha }}" | head -c 7)
-          SNAPSHOT_VERSION="${PKG_VERSION}.dev${SHORT_SHA}"
+          # PEP 440: the segment after ".dev" must be numeric-only, but a git
+          # SHA is hex (contains a-f). Use a "+g<sha>" local version segment
+          # instead — PEP 440 allows arbitrary alphanumerics after "+", and
+          # this mirrors the convention setuptools_scm/hatch-vcs use for
+          # dev builds off a git SHA (e.g. "2026.07.01+ga1b2c3d").
+          SNAPSHOT_VERSION="${PKG_VERSION}+g${SHORT_SHA}"
           sed -i "s/^version = \".*\"/version = \"${SNAPSHOT_VERSION}\"/" pyproject.toml
           echo "Snapshot version: $SNAPSHOT_VERSION"
 

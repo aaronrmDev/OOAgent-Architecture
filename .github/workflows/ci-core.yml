@@ -134,5 +134,10 @@ jobs:
         uses: astral-sh/setup-uv@v3
       - name: Install dependencies
         run: uv sync --extra dev --extra otel
-      - name: pip-audit (known vulnerabilities)
+      # NOTE: pip-audit has no `--audit-level`-style severity flag (unlike the
+      # `npm audit --audit-level=high` this job replaces), so this gate fails
+      # on ANY known vulnerability, including LOW/MEDIUM severity — not just
+      # HIGH/CRITICAL as before. This is an intentional, documented tightening
+      # of the dependency-audit gate, not an accidental behavior change.
+      - name: pip-audit (known vulnerabilities — fails on ANY severity, see note above)
         run: uv run --with pip-audit pip-audit

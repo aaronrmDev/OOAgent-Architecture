@@ -73,7 +73,12 @@ jobs:
       - name: Full test suite
         run: PYTHONPATH=src uv run pytest tests/ -v
 
-      - name: Dependency audit (known vulnerabilities)
+      # NOTE: pip-audit has no `--audit-level`-style severity flag (unlike the
+      # `npm audit --audit-level=high` this job replaces), so this gate fails
+      # on ANY known vulnerability, including LOW/MEDIUM severity — not just
+      # HIGH/CRITICAL as before. This is an intentional, documented tightening
+      # of the dependency-audit gate, not an accidental behavior change.
+      - name: Dependency audit (known vulnerabilities — fails on ANY severity, see note above)
         run: uv run --with pip-audit pip-audit
 
   # ── Release Artifact Build ────────────────────────────────────────────────
@@ -142,7 +147,7 @@ jobs:
           \`\`\`
 
           ### AI Safety Gate
-          All AI disaster prevention guards passed before this release was cut.
+          All 13 AI disaster prevention guards passed before this release was cut.
           See \`scripts/ai-safety-gate.sh\` for details on each guard.
 
           ### Installation
