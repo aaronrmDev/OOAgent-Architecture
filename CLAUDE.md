@@ -155,6 +155,10 @@ class ILLMClient(ABC):
 
     @property
     @abstractmethod
+    def vendor(self) -> LLMVendor: ...
+
+    @property
+    @abstractmethod
     def max_tokens(self) -> int: ...
 
     @property
@@ -276,8 +280,15 @@ class ISessionState(ABC):
     @abstractmethod
     def context_name(self) -> str: ...
 
+    @property
+    @abstractmethod
+    def trace(self) -> FSMTrace: ...
+
     @abstractmethod
     def transition(self, to: AgentFSMState) -> None: ...
+
+    @abstractmethod
+    def set_context(self, name: str) -> None: ...
 
     @abstractmethod
     def snapshot(self) -> Memento: ...
@@ -290,6 +301,12 @@ class ISessionState(ABC):
 
     @abstractmethod
     def subscribe(self, obs: StateObserver) -> Unsubscribe: ...
+
+    @abstractmethod
+    async def flush(self) -> None: ...
+
+    @abstractmethod
+    def reset(self) -> None: ...
 
 
 class ITelemetryProvider(ABC):
@@ -602,8 +619,11 @@ async def respond(self, query: Query) -> Artifact:
             pipeline = self._pipeline.extend(context.pipeline())  # CoR
             snapshot = self._state.snapshot()                     # Memento
         except Exception as err:
-            # GATHERING's un-guarded prelude has no legal FSM path to FAILURE
-            # (see VALID_TRANSITIONS in state.py) — recover unconditionally.
+            # `context` has not been resolved yet at this point, so there is
+            # no IDomainContext to pass into _handle_failure(err, context,
+            # snapshot.id) — an argument-availability problem, not an FSM
+            # legality problem (GATHERING → FAILURE is a legal transition
+            # per VALID_TRANSITIONS in state.py).
             return self._handle_unrecoverable_failure(err, None)
 
         # MODELING: validate query
@@ -633,7 +653,7 @@ async def respond(self, query: Query) -> Artifact:
         # DELIVERING: build + decorate artifact
         self._state.transition("DELIVERING")
         try:
-            format = query.format or context.artifact_preferences().preferred_formats[0]
+            format = query.format or (context.artifact_preferences().preferred_formats or ["text"])[0]
             artifact = self._artifact_factory.build(solution, format, context.artifact_preferences())
             enriched = self._decorator.apply(artifact, self._provenance.dump())
 
@@ -648,7 +668,12 @@ async def respond(self, query: Query) -> Artifact:
             self._state.commit(cmd)
             self._state.reset()                                   # → FSM.IDLE
 
-            self._telemetry.event("turn.complete", {"context": context.name, "format": format})
+            self._telemetry.event(
+                "turn.complete",
+                {"context": context.name, "format": format, "turn": self._state.turn},
+            )
+
+            self._lifecycle.record_llm_success()
             return enriched
             # Invariants: FSM == IDLE; turn incremented by 1; provenance cleared
         except Exception as err:

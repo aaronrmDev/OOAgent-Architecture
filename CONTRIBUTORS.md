@@ -46,7 +46,7 @@ uv run pytest tests/ -v
 
 ### 3. AI Safety Gate
 
-Every contribution **must pass all 10 AI Safety Guards** before merge.
+Every contribution **must pass all 13 AI Safety Guards** before merge.
 The guards are not advisory — they map directly to documented AI disasters
 that caused real harm. See `scripts/ai-safety-gate.sh` for details.
 
