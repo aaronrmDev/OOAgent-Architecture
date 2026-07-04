@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ooagent.core.orchestrator import MultiAgentOrchestrator, SignalBus
-from ooagent.core.protocols import ArtifactPolicy, IDomainContext, ProblemClass, Query, Term
+from ooagent.core.protocols import ArtifactPolicy, IDomainContext, ProblemClass, Query
 
 
 class _StubContext(IDomainContext):
