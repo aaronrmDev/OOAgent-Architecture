@@ -26,6 +26,13 @@ def _safe_eval(expr: str) -> float:
     Supports: + - * / ** ( ) and numeric literals (int, float, scientific
     notation). Mirrors the TS `safeEval` implementation exactly, including
     its lack of support for chained `**` (e.g. `2 ** 3 ** 2` is rejected).
+
+    Unary sign binds looser than `**`, matching standard math/Python
+    precedence: `-2 ** 2 == -4.0`, not `(-2) ** 2 == 4.0`. `parse_signed_pow`
+    applies an optional leading sign around the full `parse_pow()` result.
+    The exponent position (`parse_exponent_unary`) separately allows its own
+    single leading sign — so `2 ** -2 == 0.25` still works — without
+    permitting a second `**` there, so chained exponentiation stays rejected.
     """
     tokens = _tokenize(expr)
     pos = 0
@@ -55,23 +62,37 @@ def _safe_eval(expr: str) -> float:
         return left
 
     def parse_mul_div() -> float:
-        left = parse_pow()
+        left = parse_signed_pow()
         while peek() in ("*", "/"):
             op = consume()
-            right = parse_pow()
+            right = parse_signed_pow()
             if op == "/" and right == 0:
                 raise ValueError("Division by zero")
             left = left * right if op == "*" else left / right
         return left
 
+    def parse_signed_pow() -> float:
+        # Sign applies AFTER exponentiation, matching standard math/Python
+        # precedence: -2 ** 2 == -4.0, not (-2) ** 2 == 4.0.
+        if peek() == "-":
+            consume()
+            return -parse_pow()
+        if peek() == "+":
+            consume()
+            return parse_pow()
+        return parse_pow()
+
     def parse_pow() -> float:
-        base = parse_unary()
+        base = parse_primary()
         if peek() == "**":
             consume()
-            return base ** parse_unary()
+            return base ** parse_exponent_unary()
         return base
 
-    def parse_unary() -> float:
+    def parse_exponent_unary() -> float:
+        # Exponent slot only: a single leading sign then a primary — no
+        # further ** here, so 2 ** -2 == 0.25 still works but chained
+        # exponentiation (2 ** 3 ** 2) is still rejected, same as before.
         if peek() == "-":
             consume()
             return -parse_primary()

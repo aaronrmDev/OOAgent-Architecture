@@ -14,6 +14,18 @@ async def test_calculator_evaluates_arithmetic_expression() -> None:
     assert result["result"] == 80.0
 
 
+async def test_calculator_applies_unary_minus_after_exponentiation() -> None:
+    tool = CalculatorTool()
+    result = await tool.execute({"expression": "-2 ** 2"})
+    assert result["result"] == -4.0
+
+
+async def test_calculator_allows_negative_exponent() -> None:
+    tool = CalculatorTool()
+    result = await tool.execute({"expression": "2 ** -2"})
+    assert result["result"] == 0.25
+
+
 async def test_calculator_rejects_empty_expression() -> None:
     tool = CalculatorTool()
     with pytest.raises(ToolExecutionError):
