@@ -44,6 +44,42 @@ def test_snapshot_and_restore_round_trip() -> None:
     assert state.context_name == "Engineering"
 
 
+def test_restore_also_restores_turn() -> None:
+    state = SessionState()
+    state.transition("GATHERING")
+    # Take a snapshot with turn=0
+    memento = state.snapshot()
+    assert memento.turn == 0
+
+    # Commit some commands to change turn
+    cmd1 = Command(
+        id="cmd-1",
+        query=Query(text="first"),
+        solution=Solution(content="result1", format="text", sources=[]),
+        context_name="NullContext",
+        trace=state.trace,
+        timestamp=0.0,
+    )
+    state.commit(cmd1)
+    assert state.turn == 1
+
+    cmd2 = Command(
+        id="cmd-2",
+        query=Query(text="second"),
+        solution=Solution(content="result2", format="text", sources=[]),
+        context_name="NullContext",
+        trace=state.trace,
+        timestamp=1.0,
+    )
+    state.commit(cmd2)
+    assert state.turn == 2
+
+    # Restore to the earlier memento and verify turn is also restored
+    state.restore(memento.id)
+    assert state.turn == 0, "restore() must also restore turn from memento"
+    assert state.fsm == "GATHERING"
+
+
 def test_commit_increments_turn_and_reset_returns_to_idle() -> None:
     state = SessionState()
     state.transition("GATHERING")

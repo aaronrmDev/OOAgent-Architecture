@@ -95,6 +95,7 @@ class SessionState(ISessionState):
         if memento is None:
             raise ValueError(f"Memento not found: {id}")
         self._fsm = memento.fsm
+        self._turn = memento.turn
         self._context_name = memento.context_name
         self._scratch = dict(memento.scratch)
         self._trace = []
