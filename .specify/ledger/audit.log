@@ -1,0 +1,2 @@
+# COBIT audit ledger — append-only. See ARTICLE III (.specify/memory/constitution.md).
+# Format: <UTC timestamp> commit=<sha> gates=<comma-separated gate names run>
