@@ -5,30 +5,99 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "sdd-verify-spec.sh"
 
+# Path substrings that identify a WSL-launcher-family stub rather than a
+# real POSIX-capable bash. Windows ships at least two of these: the
+# System32 ``bash.exe`` WSL launcher, and an "App Execution Alias" stub
+# under WindowsApps (both under a ``...\Microsoft\...`` tree). Neither can
+# execute a real shell script; both must be rejected even though only one
+# contains "system32".
+_WSL_STUB_MARKERS = ("system32", "windowsapps", "microsoft")
+
+# Well-known Git-for-Windows install locations. Git for Windows' default
+# installer only adds ``Git\cmd`` to PATH (which has no bash.exe at all),
+# so the real interpreter at ``Git\bin\bash.exe`` / ``Git\usr\bin\bash.exe``
+# is frequently unreachable via a PATH-only scan and must be probed
+# explicitly as a fallback.
+_GIT_BASH_FALLBACKS = (
+    r"Git\bin\bash.exe",
+    r"Git\usr\bin\bash.exe",
+)
+
+
+def _bash_actually_works(candidate: str) -> bool:
+    """Self-validate a candidate by actually invoking it.
+
+    A working self-test catches launcher stubs that a path-substring
+    blocklist would miss entirely (e.g. a third, differently-located WSL
+    alias future Windows builds might add).
+    """
+    try:
+        result = subprocess.run(
+            [candidate, "-c", "echo ok"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and result.stdout.strip() == "ok"
+
 
 def _resolve_bash() -> str:
-    """Resolve a real bash, bypassing Windows' WSL launcher stub.
+    """Resolve a real, working bash, bypassing Windows' WSL launcher stubs.
 
-    On Windows machines with WSL installed, an unqualified ``bash`` passed
-    to ``subprocess.run`` resolves to ``C:\\Windows\\System32\\bash.exe``
-    (a WSL launcher) rather than Git Bash — Windows' CreateProcess search
-    order checks System32 before consulting PATH, regardless of PATH
-    ordering. That stub mangles native Windows paths (e.g. drive-letter
-    paths with backslashes) passed as argv, causing every test here to
-    fail with exit 127 / "No such file or directory" — independent of
-    scripts/sdd-verify-spec.sh's own logic. This walks PATH directories in
-    order and skips any bash under system32. On Linux CI this is a no-op:
-    the first (and only) ``bash`` found is returned unchanged.
+    On Windows machines with WSL (or just the "App Execution Alias" WSL
+    stub) installed, an unqualified ``bash`` passed to ``subprocess.run``
+    can resolve to a launcher stub (``C:\\Windows\\System32\\bash.exe`` or
+    ``...\\Microsoft\\WindowsApps\\bash.exe``) rather than Git Bash —
+    Windows' CreateProcess search order checks these locations ahead of
+    PATH-listed directories, regardless of PATH ordering. Those stubs
+    mangle native Windows paths (e.g. drive-letter paths with backslashes)
+    passed as argv, causing every test here to fail with exit 127 / "No
+    such file or directory" — independent of scripts/sdd-verify-spec.sh's
+    own logic.
+
+    Strategy, in order:
+      1. Walk PATH directories, skip any candidate whose path contains a
+         known WSL-stub marker, and self-validate (actually invoke) the
+         rest — accept the first one that really runs a shell command.
+      2. If PATH yields nothing usable (Git for Windows' default installer
+         only adds ``Git\\cmd`` to PATH, which has no bash.exe at all),
+         probe well-known Git-for-Windows install locations directly.
+      3. Fall back to the unqualified ``"bash"`` name.
+
+    On Linux CI (and any non-Windows platform) this is a deliberate no-op:
+    none of the above runs, and plain ``"bash"`` — already correct there —
+    is returned unchanged.
     """
-    for candidate in os.environ.get("PATH", "").split(os.pathsep):
-        exe = shutil.which("bash", path=candidate)
-        if exe and "system32" not in exe.lower():
+    if sys.platform != "win32":
+        return "bash"
+
+    for candidate_dir in os.environ.get("PATH", "").split(os.pathsep):
+        exe = shutil.which("bash", path=candidate_dir)
+        if not exe:
+            continue
+        lowered = exe.lower()
+        if any(marker in lowered for marker in _WSL_STUB_MARKERS):
+            continue
+        if _bash_actually_works(exe):
             return exe
+
+    for env_var in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+        base = os.environ.get(env_var)
+        if not base:
+            continue
+        for rel in _GIT_BASH_FALLBACKS:
+            exe = os.path.join(base, rel)
+            if os.path.isfile(exe) and _bash_actually_works(exe):
+                return exe
+
     return "bash"
 
 
