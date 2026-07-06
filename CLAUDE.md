@@ -1074,5 +1074,33 @@ When asked what model is active:
 
 ---
 
+## 24. IDeliveryWorkflow — SpecDrivenWorkflow Layer
+
+A fourth OOC layer, orthogonal to `IDomainContext`: `IDeliveryWorkflow`
+governs software-delivery *sequence and proof* — in what order features
+get built, and what evidence proves each requirement is met — rather
+than runtime query answering. `core/agent.py`'s `respond()` Template
+Method is untouched; this layer is a peer, never a pipeline step.
+
+The sole implementation, `SpecDrivenWorkflow`
+(`src/ooagent/workflow/spec_driven.py`), reifies GitHub Spec Kit's
+11-phase SDD methodology as real objects: an 8-Article constitution
+(`workflow/constitution.py`), a 19-target gate catalog
+(`workflow/gate_catalog.py`), and traceability-matrix orphan detection
+(`workflow/traceability.py`). Gate *execution* is deliberately not this
+class's concern — `.specify/gates/Makefile` is the DIP seam that binds
+gate names to this repo's concrete tools (`mypy`, `ruff`, `pytest`,
+`pip-audit`, `gitleaks`), enforced additively by
+`.github/workflows/sdd-gate.yml` alongside the existing Gitflow
+workflows.
+
+Full specification: `docs/SPECDRIVEN.md`. Self-hosted proof of the
+traceability gate: `specs/001-spec-driven-workflow-layer/`. Extension
+protocol for adding a second `IDeliveryWorkflow` implementation follows
+§22's pattern above — implement the ABC, ship conformance coverage, no
+edits to `core/protocols.py` required.
+
+---
+
 *This document is the architectural ground truth for all OOAgent instances.
 It is version-controlled, public, and MIT-licensed. Contributions welcome.*
