@@ -51,6 +51,19 @@ def test_verify_traceability_passes_fully_resolved_entry() -> None:
     assert result.passed is True
 
 
+def test_verify_traceability_passes_when_code_ref_and_ci_evidence_are_none() -> None:
+    entry = TraceabilityEntry(
+        req_id="REQ-6",
+        ac_id="AC-6",
+        task_id="TASK-6",
+        test_id="tests/test_x.py::test_v",
+        code_ref=None,
+        ci_evidence=None,
+    )
+    (result,) = verify_traceability((entry,))
+    assert result.passed is True
+
+
 def test_verify_traceability_processes_multiple_entries_independently() -> None:
     good = TraceabilityEntry(
         req_id="REQ-4",

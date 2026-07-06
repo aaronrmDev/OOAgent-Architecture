@@ -248,3 +248,8 @@ workflow — no edits to `core/protocols.py` required (OCP, per CLAUDE.md
 - `.specify/gates/Makefile` requires GNU Make; not verified locally on
   Windows dev environments without Make installed — verified in CI
   (`ubuntu-latest`) via `sdd-gate.yml`.
+- CI-produced ledger entries are captured as a retained workflow artifact
+  (`sdd-ledger-audit-${{ github.sha }}`, 30-day retention), not committed
+  back to the repository; only local `make -f .specify/gates/Makefile
+  ledger` runs append directly to the tracked working-tree
+  `.specify/ledger/audit.log`.

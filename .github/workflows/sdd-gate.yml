@@ -70,3 +70,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: $GATE ledger
+      - name: Upload ledger audit entry
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdd-ledger-audit-${{ github.sha }}
+          path: .specify/ledger/audit.log
+          retention-days: 30

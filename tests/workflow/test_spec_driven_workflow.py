@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from ooagent.core.protocols import TraceabilityEntry
+from ooagent.workflow.constitution import ARTICLES
+from ooagent.workflow.gate_catalog import GATE_TARGETS
 from ooagent.workflow.spec_driven import SpecDrivenWorkflow
 
 workflow = SpecDrivenWorkflow()
@@ -47,6 +49,8 @@ def test_gate_chain_raises_value_error_for_unknown_phase() -> None:
 def test_constitution_and_gate_targets_delegate_to_their_modules() -> None:
     assert len(workflow.constitution()) == 8
     assert len(workflow.gate_targets()) == 19
+    assert workflow.constitution() is ARTICLES
+    assert workflow.gate_targets() is GATE_TARGETS
 
 
 def test_verify_traceability_delegates_to_traceability_module() -> None:
