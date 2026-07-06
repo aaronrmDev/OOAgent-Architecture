@@ -1,4 +1,4 @@
-"""tests/conformance/test_delivery_workflow.py — IDeliveryWorkflow conformance suite (§17 CLAUDE.md)."""
+"""tests/conformance/test_delivery_workflow.py — IDeliveryWorkflow conformance (§17 CLAUDE.md)."""
 
 from __future__ import annotations
 
