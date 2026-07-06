@@ -1,0 +1,72 @@
+name: sdd-gate
+
+# SpecDrivenWorkflow §5 — Zero-Defects gate contract for OOAgent itself.
+# Additive alongside the existing Gitflow workflows (ci-core.yml, etc.);
+# does not replace or modify them. Runs the new SDD-specific gates
+# (verify-spec, coverage-gate, ledger) plus typecheck/lint/format-check/
+# test through the .specify/gates/Makefile DIP seam, proving the seam
+# agrees with ci-core.yml's direct tool invocations.
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+
+concurrency:
+  group: sdd-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GATE: make -f .specify/gates/Makefile
+
+jobs:
+  verify-spec:
+    name: SDD verify-spec (traceability)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: $GATE verify-spec
+
+  static-via-makefile:
+    name: typecheck + lint + format-check via Makefile (DIP-seam parity)
+    needs: verify-spec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install dependencies
+        run: uv sync --extra dev --extra otel
+      - run: $GATE typecheck
+      - run: $GATE lint
+      - run: $GATE format-check
+
+  test-and-coverage:
+    name: test + coverage-gate via Makefile
+    needs: static-via-makefile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+      - name: Install dependencies
+        run: uv sync --extra dev --extra otel
+      - run: $GATE test
+      - run: $GATE coverage-gate
+      - name: Upload coverage evidence
+        if: always() && hashFiles('.specify/ci/out/**') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdd-coverage-evidence-${{ github.sha }}
+          path: .specify/ci/out/
+          retention-days: 30
+
+  ledger:
+    name: ledger (COBIT audit entry)
+    needs: [verify-spec, static-via-makefile, test-and-coverage]
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: $GATE ledger
