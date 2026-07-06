@@ -8,10 +8,16 @@ import pytest
 
 from ooagent.core.protocols import (
     AgentConfig,
+    Article,
+    GateResult,
+    GateSpec,
     IAgent,
+    IDeliveryWorkflow,
     ILLMClient,
+    Phase,
     Query,
     ToolExecutionError,
+    TraceabilityEntry,
 )
 
 
@@ -43,3 +49,52 @@ def test_tool_execution_error_preserves_message_and_call_args() -> None:
     assert "Tool execution failed: calculator" in str(err)
     assert err.call_args == {"expression": "1+1"}
     assert err.tool_name == "calculator"
+
+
+def test_idelivery_workflow_cannot_be_instantiated_directly() -> None:
+    with pytest.raises(TypeError):
+        IDeliveryWorkflow()  # type: ignore[abstract]
+
+
+def test_phase_is_a_frozen_dataclass() -> None:
+    p = Phase(
+        name="/specify",
+        artifact="spec.md",
+        itil_stage="Engage",
+        cobit_domain="APO",
+        owasp_gate="abuse-cases noted",
+        oop_pattern="-",
+    )
+    with pytest.raises(FrozenInstanceError):
+        p.name = "changed"  # type: ignore[misc]
+
+
+def test_article_is_a_frozen_dataclass() -> None:
+    a = Article(numeral="I", title="Form", body="...", key="form")
+    with pytest.raises(FrozenInstanceError):
+        a.title = "changed"  # type: ignore[misc]
+
+
+def test_gate_spec_is_a_frozen_dataclass() -> None:
+    g = GateSpec(name="lint", required=True, intent="linter, zero warnings")
+    with pytest.raises(FrozenInstanceError):
+        g.required = False  # type: ignore[misc]
+
+
+def test_traceability_entry_allows_none_for_unresolved_fields() -> None:
+    entry = TraceabilityEntry(
+        req_id="REQ-1",
+        ac_id="AC-1",
+        task_id=None,
+        test_id=None,
+        code_ref=None,
+        ci_evidence=None,
+    )
+    assert entry.task_id is None
+    assert entry.test_id is None
+
+
+def test_gate_result_is_a_frozen_dataclass() -> None:
+    r = GateResult(gate_name="verify-spec", passed=True, message="ok")
+    with pytest.raises(FrozenInstanceError):
+        r.passed = False  # type: ignore[misc]
