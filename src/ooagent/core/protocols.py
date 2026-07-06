@@ -584,3 +584,75 @@ class IToolUser(ABC):
 class IObservable(ABC):
     @abstractmethod
     def subscribe(self, observer: StateObserver) -> Unsubscribe: ...
+
+
+# ── Delivery workflow (SDD) value objects & interface ──────────────────────
+
+
+@dataclass(frozen=True)
+class Phase:
+    name: str
+    artifact: str
+    itil_stage: str
+    cobit_domain: str
+    owasp_gate: str
+    oop_pattern: str
+
+
+@dataclass(frozen=True)
+class Article:
+    numeral: str
+    title: str
+    body: str
+    key: str
+
+
+@dataclass(frozen=True)
+class GateSpec:
+    name: str
+    required: bool
+    intent: str
+
+
+@dataclass(frozen=True)
+class TraceabilityEntry:
+    req_id: str
+    ac_id: str
+    task_id: str | None
+    test_id: str | None
+    code_ref: str | None
+    ci_evidence: str | None
+
+
+@dataclass(frozen=True)
+class GateResult:
+    gate_name: str
+    passed: bool
+    message: str
+
+
+class IDeliveryWorkflow(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def version(self) -> str: ...
+
+    @abstractmethod
+    def phases(self) -> tuple[Phase, ...]: ...
+
+    @abstractmethod
+    def constitution(self) -> tuple[Article, ...]: ...
+
+    @abstractmethod
+    def gate_targets(self) -> dict[str, GateSpec]: ...
+
+    @abstractmethod
+    def gate_chain(self, phase_name: str) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    def verify_traceability(
+        self, entries: tuple[TraceabilityEntry, ...]
+    ) -> tuple[GateResult, ...]: ...
