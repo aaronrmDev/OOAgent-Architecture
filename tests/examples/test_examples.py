@@ -6,6 +6,7 @@ import pytest
 
 from examples.domain_context_agent import main as domain_context_main
 from examples.minimal_agent import main as minimal_main
+from examples.telemetry_enabled_agent import main as telemetry_main
 from examples.tool_enabled_agent import main as tool_main
 
 
@@ -32,3 +33,11 @@ async def test_domain_context_agent_resolves_unit_conversion_context(
     await domain_context_main()
     captured = capsys.readouterr()
     assert "resolved context: UnitConversion v1.0" in captured.out
+
+
+async def test_telemetry_enabled_agent_emits_telemetry(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    await telemetry_main()
+    captured = capsys.readouterr()
+    assert "[Telemetry]" in captured.out
