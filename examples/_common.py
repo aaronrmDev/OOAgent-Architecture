@@ -32,7 +32,7 @@ class DemoLLMClient(ILLMClient):
 
     @property
     def vendor(self) -> LLMVendor:
-        return "anthropic"
+        return "anthropic"  # arbitrary — any valid LLMVendor works for this deterministic stand-in
 
     @property
     def max_tokens(self) -> int:

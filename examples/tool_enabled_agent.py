@@ -5,6 +5,17 @@ Adds a ToolRegistry containing the framework's built-in CalculatorTool
 tool registration and injection working end-to-end.
 
 Run: uv run python -m examples.tool_enabled_agent
+
+To use a real LLM backend instead of DemoLLMClient, replace the
+llm_client below with, e.g.:
+
+    import os
+    from ooagent.adapters.llm.anthropic import AnthropicConfig, AnthropicLLMClient
+    llm_client = AnthropicLLMClient(
+        AnthropicConfig(api_key=os.environ["ANTHROPIC_API_KEY"], model="claude-opus-4-6"),
+    )
+
+Nothing else in this file changes.
 """
 
 from __future__ import annotations

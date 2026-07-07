@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11+-3776AB.svg)](https://www.python.org/)
 
-> A composition framework for building type-safe, provider-portable AI agents — validation, testability, and observability enforced by construction, not layered on after.
+> A composition framework for building type-safe, provider-portable AI agents — with validation, testability, and observability wired into every turn as first-class extension points, not optional add-ons.
 
 ---
 
@@ -36,9 +36,9 @@ format:  text
 content: Hello! I'm a validated OOAgent response.
 ```
 
-That's a complete turn through OOAgent's FSM (`IDLE → GATHERING → MODELING → SOLVING → VALIDATING → DELIVERING → IDLE`) — a query in, a constraint-validated `Artifact` out. No API key needed: this example uses a deterministic stand-in client so you can see it work before wiring a real backend.
+That's a complete turn through OOAgent's FSM (`IDLE → GATHERING → MODELING → SOLVING → VALIDATING → DELIVERING → IDLE`) — a query in, an `Artifact` out, having passed through the same constraint-validation gate every turn does (empty by default here; domain contexts supply real invariants — see `examples/domain_context_agent.py`). No API key needed: this example uses a deterministic stand-in client so you can see it work before wiring a real backend.
 
-Four tiered examples, each a complete runnable file:
+Four focused examples, one concept each, each a complete runnable file:
 
 | Example | Demonstrates |
 |---|---|

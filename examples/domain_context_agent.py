@@ -12,6 +12,17 @@ resolution/injection, not solver dispatch, which is a separate, deeper
 topic (see CLAUDE.md §4's Strategy pattern entry).
 
 Run: uv run python -m examples.domain_context_agent
+
+To use a real LLM backend instead of DemoLLMClient, replace the
+llm_client below with, e.g.:
+
+    import os
+    from ooagent.adapters.llm.anthropic import AnthropicConfig, AnthropicLLMClient
+    llm_client = AnthropicLLMClient(
+        AnthropicConfig(api_key=os.environ["ANTHROPIC_API_KEY"], model="claude-opus-4-6"),
+    )
+
+Nothing else in this file changes.
 """
 
 from __future__ import annotations
@@ -111,6 +122,7 @@ async def main() -> None:
     query = Query(text="Convert 10 meters to feet.")
     resolved = ctx_registry.resolve(query)
     print(f"resolved context: {resolved.name} v{resolved.version}")
+    print(f"system prompt extension: {resolved.system_prompt_extension()}")
 
     agent = OOAgent(
         llm_client=DemoLLMClient("10 meters is approximately 32.8 feet."),
