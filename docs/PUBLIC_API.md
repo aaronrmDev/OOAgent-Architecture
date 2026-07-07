@@ -10,7 +10,7 @@
 | `Artifact` | The validated output of `OOAgent.respond()`. |
 | `ILLMClient` | Implement this to add a new LLM backend. |
 | `IDomainContext` | Implement this to add a new domain (see `examples/domain_context_agent.py`). |
-| `ITool` | Implement this (or extend `BaseTool`) to add a new tool. |
+| `ITool` | Implement this (or extend `BaseTool`, `ooagent.adapters.tools.base`) to add a new tool. |
 | `IPlugin` | Implement this to add a new plugin. |
 | `ContextRegistry` | Holds registered `IDomainContext` instances; construct your own rather than relying on the process-wide singleton when you need isolation (see `examples/domain_context_agent.py`). |
 | `ToolRegistry` | Holds registered `ITool` instances (see `examples/tool_enabled_agent.py`). |
