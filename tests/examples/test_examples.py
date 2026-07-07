@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from examples.minimal_agent import main as minimal_main
+from examples.tool_enabled_agent import main as tool_main
 
 
 async def test_minimal_agent_runs_and_prints_artifact(
@@ -14,3 +15,11 @@ async def test_minimal_agent_runs_and_prints_artifact(
     captured = capsys.readouterr()
     assert "format:  text" in captured.out
     assert "content: Hello! I'm a validated OOAgent response." in captured.out
+
+
+async def test_tool_enabled_agent_registers_calculator(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    await tool_main()
+    captured = capsys.readouterr()
+    assert "registered tools: ['calculator']" in captured.out
