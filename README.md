@@ -36,7 +36,7 @@ format:  text
 content: Hello! I'm a validated OOAgent response.
 ```
 
-That's a complete turn through OOAgent's FSM (`IDLE → GATHERING → MODELING → SOLVING → VALIDATING → DELIVERING → IDLE`) — a query in, an `Artifact` out, having passed through the same constraint-validation gate every turn does (empty by default here; domain contexts supply real invariants — see `examples/domain_context_agent.py`). No API key needed: this example uses a deterministic stand-in client so you can see it work before wiring a real backend.
+That's a complete turn through OOAgent's FSM (`IDLE → GATHERING → MODELING → SOLVING → VALIDATING → DELIVERING → IDLE`) — a query in, an `Artifact` out, having passed through the same constraint-validation gate every turn does (empty by default here; domain contexts declare real invariants — see `examples/domain_context_agent.py`). No API key needed: this example uses a deterministic stand-in client so you can see it work before wiring a real backend.
 
 Four focused examples, one concept each, each a complete runnable file:
 
