@@ -55,6 +55,7 @@ Run any of them: `uv run python -m examples.<name>`. Each file's docstring shows
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — composition root, design patterns, project structure, extension protocol
 - [`docs/PUBLIC_API.md`](docs/PUBLIC_API.md) — what's core vs. advanced, and the stability contract
+- [`docs/TESTING.md`](docs/TESTING.md) — how to test adapters without network calls, test doubles, coverage floor
 - [`CLAUDE.md`](CLAUDE.md) — the full architectural contract: invariants, FSM, failure modes, testing contracts
 - [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — how to contribute
 
