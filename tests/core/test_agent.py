@@ -10,6 +10,7 @@ from ooagent.core.protocols import (
     CompletionChunk,
     CompletionResponse,
     ILLMClient,
+    ITelemetryProvider,
     LifecycleError,
     Query,
     TokenUsage,
@@ -133,6 +134,58 @@ class _AlwaysFailingLLMClient(ILLMClient):
     @property
     def supports_tools(self):
         return False
+
+
+class _RecordingTelemetry(ITelemetryProvider):
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+
+    async def span(self, name, fn):
+        return await fn()
+
+    def counter(self, name, delta=1):
+        return None
+
+    def gauge(self, name, value):
+        return None
+
+    def histogram(self, name, value):
+        return None
+
+    def event(self, name, payload):
+        self.events.append((name, payload))
+
+
+async def test_llm_call_events_fire_on_success() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_StubLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    await agent.respond(Query(text="hello agent"))
+
+    assert ("llm.call_started", {"round": 0, "vendor": "anthropic"}) in telemetry.events
+    assert (
+        "llm.call_completed",
+        {"round": 0, "vendor": "anthropic", "input_tokens": 1, "output_tokens": 1},
+    ) in telemetry.events
+
+    await agent.dispose()
+
+
+async def test_llm_call_failed_event_fires_on_llm_error() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_AlwaysFailingLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    await agent.respond(Query(text="hello agent"))
+
+    assert ("llm.call_started", {"round": 0, "vendor": "anthropic"}) in telemetry.events
+    assert (
+        "llm.call_failed",
+        {"round": 0, "vendor": "anthropic", "error_type": "RuntimeError"},
+    ) in telemetry.events
+
+    await agent.dispose()
 
 
 async def test_llm_failure_increments_circuit_breaker_by_exactly_one() -> None:

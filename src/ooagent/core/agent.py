@@ -249,12 +249,32 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 ),
             )
 
+            self._telemetry.event(
+                "llm.call_started", {"round": _round, "vendor": self._llm_client.vendor}
+            )
             try:
                 response = await self._llm_client.complete(request)
                 self._lifecycle.record_llm_success()
-            except Exception:
+            except Exception as err:
                 self._lifecycle.record_llm_failure()
+                self._telemetry.event(
+                    "llm.call_failed",
+                    {
+                        "round": _round,
+                        "vendor": self._llm_client.vendor,
+                        "error_type": type(err).__name__,
+                    },
+                )
                 raise
+            self._telemetry.event(
+                "llm.call_completed",
+                {
+                    "round": _round,
+                    "vendor": self._llm_client.vendor,
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                },
+            )
 
             if response.stop_reason == "tool_use" and response.tool_calls:
                 messages.append(Message(role="assistant", content=response.content))
