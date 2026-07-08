@@ -72,3 +72,8 @@ deliberate current state, not oversights:
 Fixing either is a deliberate future decision (normalizing adapter
 behavior is itself a design choice — silently "fixing" one direction or
 the other without deciding which behavior is correct isn't done here).
+
+Additionally, streaming-delta content parsing and tool-call round-trips
+are not yet covered by the behavior-matrix suite — a known, not-yet-tested
+gap identified during review rather than an oversight to silently patch
+over here.

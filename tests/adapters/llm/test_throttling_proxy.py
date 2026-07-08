@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
+
+import pytest
 
 from ooagent.adapters.llm.caching_proxy import ThrottlingLLMProxy, ThrottlingOptions
 from ooagent.core.protocols import (
@@ -94,6 +97,29 @@ async def test_throttling_proxy_does_not_sleep_when_tokens_available() -> None:
     await proxy.complete(CompletionRequest(messages=[Message(role="user", content="hi")]))
     elapsed = time.monotonic() - start
     assert elapsed < 0.5
+
+
+async def test_throttling_proxy_sleeps_when_token_bucket_is_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the token bucket is exhausted, _throttle() must actually
+    invoke asyncio.sleep() with the bucket's per-token duration —
+    monkeypatched here (rather than left to really sleep) so the test
+    stays fast and deterministic (CLAUDE.md §17)."""
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        sleep_calls.append(seconds)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+
+    inner = _StubInnerClient()
+    proxy = ThrottlingLLMProxy(inner, ThrottlingOptions(requests_per_minute=60))
+    proxy._tokens = 0  # type: ignore[attr-defined]  # force the exhausted-bucket path
+
+    await proxy.complete(CompletionRequest(messages=[Message(role="user", content="hi")]))
+
+    assert sleep_calls == [1.0]  # 60.0 / requests_per_minute(60) == 1.0
 
 
 def test_refill_replenishes_tokens_proportional_to_elapsed_time() -> None:
