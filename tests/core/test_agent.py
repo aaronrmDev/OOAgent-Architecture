@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from ooagent.adapters.tools.base import BaseTool
 from ooagent.core.agent import OOAgent
 from ooagent.core.protocols import (
     AgentConfig,
@@ -17,7 +18,6 @@ from ooagent.core.protocols import (
     ToolCall,
 )
 from ooagent.core.registry import ContextRegistry
-from ooagent.adapters.tools.base import BaseTool
 
 
 class _StubLLMClient(ILLMClient):
