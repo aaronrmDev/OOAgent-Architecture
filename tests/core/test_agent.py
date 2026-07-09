@@ -14,8 +14,10 @@ from ooagent.core.protocols import (
     LifecycleError,
     Query,
     TokenUsage,
+    ToolCall,
 )
 from ooagent.core.registry import ContextRegistry
+from ooagent.adapters.tools.base import BaseTool
 
 
 class _StubLLMClient(ILLMClient):
@@ -156,6 +158,74 @@ class _RecordingTelemetry(ITelemetryProvider):
         self.events.append((name, payload))
 
 
+class _ToolUseLLMClient(ILLMClient):
+    """Returns one tool_use round for `tool_name`, then end_turn."""
+
+    def __init__(self, tool_name: str) -> None:
+        self._tool_name = tool_name
+        self._calls = 0
+
+    async def complete(self, request):
+        self._calls += 1
+        if self._calls == 1:
+            return CompletionResponse(
+                content="",
+                stop_reason="tool_use",
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+                tool_calls=[ToolCall(id="call-1", name=self._tool_name, args={"text": "hi"})],
+            )
+        return CompletionResponse(
+            content="done",
+            stop_reason="end_turn",
+            usage=TokenUsage(input_tokens=1, output_tokens=1),
+        )
+
+    async def stream(self, request):
+        yield CompletionChunk(delta="", done=True)
+
+    @property
+    def model_id(self):
+        return "stub-tool-use"
+
+    @property
+    def vendor(self):
+        return "anthropic"
+
+    @property
+    def max_tokens(self):
+        return 4096
+
+    @property
+    def supports_tools(self):
+        return True
+
+
+class _EchoTool(BaseTool):
+    name = "echo"
+    description = "Echoes input text."
+
+    def input_schema(self):
+        return {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        }
+
+    async def execute(self, args):
+        return {"echo": args["text"]}
+
+
+class _RaisingTool(BaseTool):
+    name = "raiser"
+    description = "Always raises."
+
+    def input_schema(self):
+        return {"type": "object", "properties": {}}
+
+    async def execute(self, args):
+        raise ValueError("tool exploded")
+
+
 async def test_llm_call_events_fire_on_success() -> None:
     telemetry = _RecordingTelemetry()
     agent = OOAgent(llm_client=_StubLLMClient(), telemetry=telemetry)
@@ -184,6 +254,56 @@ async def test_llm_call_failed_event_fires_on_llm_error() -> None:
         "llm.call_failed",
         {"round": 0, "vendor": "anthropic", "error_type": "RuntimeError"},
     ) in telemetry.events
+
+    await agent.dispose()
+
+
+async def test_tool_call_events_fire_on_success() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_ToolUseLLMClient("echo"), telemetry=telemetry)
+    agent._tool_registry.register(_EchoTool())
+    await agent.initialize(AgentConfig())
+
+    await agent.respond(Query(text="use the echo tool"))
+
+    assert ("tool.call_started", {"tool": "echo"}) in telemetry.events
+    assert ("tool.call_completed", {"tool": "echo"}) in telemetry.events
+    started_idx = telemetry.events.index(("tool.call_started", {"tool": "echo"}))
+    completed_idx = telemetry.events.index(("tool.call_completed", {"tool": "echo"}))
+    assert started_idx < completed_idx
+
+    await agent.dispose()
+
+
+async def test_tool_call_failed_event_fires_when_tool_raises() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_ToolUseLLMClient("raiser"), telemetry=telemetry)
+    agent._tool_registry.register(_RaisingTool())
+    await agent.initialize(AgentConfig())
+
+    await agent.respond(Query(text="use the raiser tool"))
+
+    assert ("tool.call_started", {"tool": "raiser"}) in telemetry.events
+    assert (
+        "tool.call_failed",
+        {"tool": "raiser", "error_type": "ValueError"},
+    ) in telemetry.events
+
+    await agent.dispose()
+
+
+async def test_tool_call_failed_event_fires_when_tool_not_found() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_ToolUseLLMClient("missing"), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    await agent.respond(Query(text="use a missing tool"))
+
+    assert (
+        "tool.call_failed",
+        {"tool": "missing", "error_type": "ToolNotFound"},
+    ) in telemetry.events
+    assert ("tool.call_started", {"tool": "missing"}) not in telemetry.events
 
     await agent.dispose()
 

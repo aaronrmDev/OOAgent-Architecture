@@ -299,12 +299,23 @@ class OOAgent(LLMAgent[Query, Artifact]):
     async def _execute_tool(self, tool_call: ToolCall) -> Any:
         tool = self._tool_registry.get(tool_call.name)
         if tool is None:
+            self._telemetry.event(
+                "tool.call_failed",
+                {"tool": tool_call.name, "error_type": "ToolNotFound"},
+            )
             return {"error": f"Tool not found: {tool_call.name}"}
+        self._telemetry.event("tool.call_started", {"tool": tool_call.name})
         try:
-            return await tool.execute(tool_call.args)
+            result = await tool.execute(tool_call.args)
         except Exception as err:
             _logger.exception("[OOAgent] Tool execution error: %s", tool_call.name)
+            self._telemetry.event(
+                "tool.call_failed",
+                {"tool": tool_call.name, "error_type": type(err).__name__},
+            )
             return {"error": str(err)}
+        self._telemetry.event("tool.call_completed", {"tool": tool_call.name})
+        return result
 
     def _handle_failure(
         self, err: Exception, context: IDomainContext, _snapshot_id: str
