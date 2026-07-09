@@ -11,6 +11,9 @@ solvers() returns {} deliberately: this example is about context
 resolution/injection, not solver dispatch, which is a separate, deeper
 topic (see CLAUDE.md §4's Strategy pattern entry).
 
+See CONTEXT_EXAMPLE.md alongside this file for a worked example of the
+CLAUDE.md §14 CONTEXT.md format, filled out for UnitConversionContext.
+
 Run: uv run python -m examples.domain_context_agent
 
 To use a real LLM backend instead of DemoLLMClient, replace the
