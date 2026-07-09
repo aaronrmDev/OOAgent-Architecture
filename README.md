@@ -57,6 +57,7 @@ Run any of them: `uv run python -m examples.<name>`. Each file's docstring shows
 - [`docs/PUBLIC_API.md`](docs/PUBLIC_API.md) — what's core vs. advanced, and the stability contract
 - [`docs/TESTING.md`](docs/TESTING.md) — how to test adapters without network calls, test doubles, coverage floor
 - [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — event schema, failure taxonomy, wiring a telemetry backend, policy hooks and redaction
+- [`docs/EXTENDING.md`](docs/EXTENDING.md) — worked examples for adding a domain context, LLM adapter, tool, or plugin
 - [`CLAUDE.md`](CLAUDE.md) — the full architectural contract: invariants, FSM, failure modes, testing contracts
 - [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — how to contribute
 
