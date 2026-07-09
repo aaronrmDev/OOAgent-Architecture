@@ -324,3 +324,18 @@ async def test_llm_failure_increments_circuit_breaker_by_exactly_one() -> None:
     assert await agent._lifecycle.health_check() == "degraded"
 
     await agent.dispose()
+
+
+async def test_turn_failed_event_fires_recoverable_true_on_llm_failure() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_AlwaysFailingLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    await agent.respond(Query(text="hello agent"))
+
+    assert (
+        "turn.failed",
+        {"context": "NullContext", "error_type": "RuntimeError", "recoverable": True},
+    ) in telemetry.events
+
+    await agent.dispose()

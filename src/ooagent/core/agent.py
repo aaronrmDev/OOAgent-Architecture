@@ -321,6 +321,10 @@ class OOAgent(LLMAgent[Query, Artifact]):
         self, err: Exception, context: IDomainContext, _snapshot_id: str
     ) -> Artifact:
         self._state.transition("FAILURE")
+        self._telemetry.event(
+            "turn.failed",
+            {"context": context.name, "error_type": type(err).__name__, "recoverable": True},
+        )
         if isinstance(err, ScopeExitError):
             artifact = self._artifact_factory.build_scope_exit(context.name, err.query)
         elif isinstance(err, ConstraintViolationError):
