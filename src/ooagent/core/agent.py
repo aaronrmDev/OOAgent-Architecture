@@ -349,6 +349,10 @@ class OOAgent(LLMAgent[Query, Artifact]):
         unconditionally, bypassing the transition-legality check, which is
         the only way to safely recover from either case."""
         context_name = context.name if context is not None else "unknown"
+        self._telemetry.event(
+            "turn.failed",
+            {"context": context_name, "error_type": type(err).__name__, "recoverable": False},
+        )
         if isinstance(err, ScopeExitError):
             artifact = self._artifact_factory.build_scope_exit(context_name, err.query)
         else:

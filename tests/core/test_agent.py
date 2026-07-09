@@ -339,3 +339,23 @@ async def test_turn_failed_event_fires_recoverable_true_on_llm_failure() -> None
     ) in telemetry.events
 
     await agent.dispose()
+
+
+async def test_turn_failed_event_fires_recoverable_false_on_delivering_failure() -> None:
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_StubLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    def _boom(artifact, provenance):
+        raise RuntimeError("boom")
+
+    agent._decorator.add_decorator(_boom)
+
+    await agent.respond(Query(text="hello agent"))
+
+    assert (
+        "turn.failed",
+        {"context": "NullContext", "error_type": "RuntimeError", "recoverable": False},
+    ) in telemetry.events
+
+    await agent.dispose()
