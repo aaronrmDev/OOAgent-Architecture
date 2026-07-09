@@ -18,7 +18,7 @@ One `agent.turn` span wraps every `respond()` call (existing). Within it:
 | `tool.call_started` | `{tool: str}` | before a resolved tool's `execute()` runs |
 | `tool.call_completed` | `{tool: str}` | the tool call returns successfully |
 | `tool.call_failed` | `{tool: str, error_type: str}` | the tool call raises, or the tool name isn't registered (`error_type: "ToolNotFound"`) |
-| `turn.failed` | `{context: str, error_type: str, recoverable: bool}` | any turn ends in `FAILURE` |
+| `turn.failed` | `{context: str, error_type: str, recoverable: bool}` | any turn ends in failure (recoverable via `FAILURE`→`DELIVERING`→`IDLE`, or unrecoverable via a direct `reset()` to `IDLE`) |
 | `turn.complete` | `{context: str, format: str, turn: int}` | a turn completes successfully (existing) |
 
 `round` is 0-indexed per `respond()` call. `error_type` is always
@@ -54,25 +54,35 @@ from ooagent.core.agent import OOAgent
 agent = OOAgent(llm_client=my_client, telemetry=ConsoleTelemetry())
 ```
 
-Swap `ConsoleTelemetry()` for `OpenTelemetryProvider(...)` in production —
-see `examples/telemetry_enabled_agent.py` for a runnable end-to-end example
-of both. No other code changes; `ITelemetryProvider` is the only interface
-`OOAgent` depends on (DIP, CLAUDE.md §2).
+`examples/telemetry_enabled_agent.py` is a runnable end-to-end example of
+`ConsoleTelemetry`. Swap `ConsoleTelemetry()` for `OpenTelemetryProvider(...)`
+in production — same one-line constructor-injection pattern; the repo does
+not currently ship a runnable `OpenTelemetryProvider` example. No other code
+changes; `ITelemetryProvider` is the only interface `OOAgent` depends on
+(DIP, CLAUDE.md §2).
 
 ## Policy hooks and redaction (already built)
 
 `DefaultSecurityPolicy` (`src/ooagent/plugins/security/policy_engine.py`)
 already covers most of what "policy hooks" and "redaction strategy" mean in
-practice:
+practice — scoped to **tool calls**, not the turn's original `Query.text` or
+final `Artifact`. `validate_input`, `validate_output`, and `check_access` are
+only ever invoked from `SecureToolWrapper.execute()`
+(`plugins/security/secure_tool_wrapper.py`); there is no built-in call from
+`OOAgent.respond()` into `ISecurityPolicy`. Wrapping is opt-in per tool:
 
-- **Prompt-injection detection** — pattern-based scanning of inbound query
-  text.
-- **PII redaction** — pattern-based redaction of common PII shapes before
-  content is logged or persisted.
+- **Prompt-injection detection** — pattern-based scanning of a wrapped
+  tool call's args.
+- **PII detection** — pattern-based detection of common PII shapes in a
+  wrapped tool call's args, logged as a warning event; `validate_input` does
+  **not** redact the args before they reach `tool.execute()`. A separate
+  `DefaultSecurityPolicy.mask_pii()` static method is available as a manual
+  utility for callers who want to redact a string themselves — it is not
+  wired into any automatic pipeline.
 - **Rate limiting** — per-caller request throttling.
-- **Access control** — allow/deny checks before a turn proceeds.
-- **Output validation** — pattern-based scanning of outbound artifact
-  content.
+- **Access control** — allow/deny checks before a wrapped tool call proceeds.
+- **Output validation** — pattern-based scanning of a wrapped tool call's
+  return value.
 
 Wire it via `SecureToolWrapper` (`plugins/security/secure_tool_wrapper.py`,
 wraps an `ITool` to run policy checks around `execute()`) or by registering
@@ -90,5 +100,8 @@ document:
 - `circuit_breaker_threshold` — consecutive LLM failures (tracked via
   `record_llm_failure()`/`record_llm_success()`) before `LifecycleManager`
   reports `"degraded"` from `health_check()`.
-- Retry/backoff and per-turn timeout budgets — see `core/lifecycle.py` for
-  the current values; this document does not change them.
+- `max_retries`, `turn_timeout_ms`, `tool_timeout_ms`, `specialist_timeout_ms`,
+  `orchestration_timeout_ms` — these fields exist on `AgentConfig`
+  (`core/protocols.py`) but are not currently read or enforced anywhere in
+  `src/`. They are inert config surface, not working retry/backoff or
+  timeout behavior; this document does not change that.
