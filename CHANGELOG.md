@@ -10,7 +10,7 @@ follows this project's `YYYY.MM.NN` scheme (see `CONTRIBUTORS.md`).
 - `SECURITY.md`, `CHANGELOG.md`, `ROADMAP.md`, and `docs/adr/` — repo
   process maturity (backlog sub-project F).
 
-## [2026.07] — Improvement backlog A-E
+## [2026.07.01] — Improvement backlog A-E
 
 ### Added
 - Golden-path README rewrite, `examples/` folder, `docs/ARCHITECTURE.md`

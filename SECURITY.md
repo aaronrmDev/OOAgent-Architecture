@@ -31,8 +31,9 @@ its normal architecture, not as a response to this policy:
 - **`DefaultSecurityPolicy`** (`src/ooagent/plugins/security/`) — prompt-
   injection detection, PII-warning logging, rate limiting, access
   control, and output validation for any `ITool` wrapped in
-  `SecureToolWrapper` (see `docs/EXTENDING.md`'s compatibility-contract
-  section for exactly what this does and does not cover today).
+  `SecureToolWrapper` (see `docs/OBSERVABILITY.md`'s "Policy hooks and
+  redaction (already built)" section for exactly what this does and does
+  not cover today).
 
 This policy is about **reporting a new vulnerability you've found** —
 a gap in the framework's own code, a bypass of the AI Safety Gate, or a

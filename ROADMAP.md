@@ -28,7 +28,7 @@ six sub-projects, A through F:
 ## Not currently planned
 
 - **A hosted docs site** (mkdocs, Docusaurus, or similar) — this repo's
-  eight `docs/*.md` files are readable directly on GitHub; building and
+  six `docs/*.md` files are readable directly on GitHub; building and
   maintaining a generated site with its own hosting and CI publish step
   is a real gap, named here rather than silently omitted, but is not
   currently planned work.
