@@ -58,6 +58,7 @@ Run any of them: `uv run python -m examples.<name>`. Each file's docstring shows
 - [`docs/TESTING.md`](docs/TESTING.md) — how to test adapters without network calls, test doubles, coverage floor
 - [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — event schema, failure taxonomy, wiring a telemetry backend, policy hooks and redaction
 - [`docs/EXTENDING.md`](docs/EXTENDING.md) — worked examples for adding a domain context, LLM adapter, tool, or plugin
+- [`docs/adr/`](docs/adr/0000-template.md) — architecture decision records: why the composition root, why SpecDrivenWorkflow is a peer layer, why the curated public API barrel
 - [`CLAUDE.md`](CLAUDE.md) — the full architectural contract: invariants, FSM, failure modes, testing contracts
 - [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — how to contribute
 
