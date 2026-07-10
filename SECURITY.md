@@ -38,4 +38,4 @@ its normal architecture, not as a response to this policy:
 This policy is about **reporting a new vulnerability you've found** —
 a gap in the framework's own code, a bypass of the AI Safety Gate, or a
 flaw in `DefaultSecurityPolicy`'s checks — not a description of what's
-already built (that's `docs/EXTENDING.md` and `CONTRIBUTORS.md`'s job).
+already built (that's `docs/OBSERVABILITY.md` and `CONTRIBUTORS.md`'s job).
