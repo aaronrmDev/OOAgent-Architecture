@@ -249,12 +249,32 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 ),
             )
 
+            self._telemetry.event(
+                "llm.call_started", {"round": _round, "vendor": self._llm_client.vendor}
+            )
             try:
                 response = await self._llm_client.complete(request)
                 self._lifecycle.record_llm_success()
-            except Exception:
+            except Exception as err:
                 self._lifecycle.record_llm_failure()
+                self._telemetry.event(
+                    "llm.call_failed",
+                    {
+                        "round": _round,
+                        "vendor": self._llm_client.vendor,
+                        "error_type": type(err).__name__,
+                    },
+                )
                 raise
+            self._telemetry.event(
+                "llm.call_completed",
+                {
+                    "round": _round,
+                    "vendor": self._llm_client.vendor,
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens,
+                },
+            )
 
             if response.stop_reason == "tool_use" and response.tool_calls:
                 messages.append(Message(role="assistant", content=response.content))
@@ -279,17 +299,32 @@ class OOAgent(LLMAgent[Query, Artifact]):
     async def _execute_tool(self, tool_call: ToolCall) -> Any:
         tool = self._tool_registry.get(tool_call.name)
         if tool is None:
+            self._telemetry.event(
+                "tool.call_failed",
+                {"tool": tool_call.name, "error_type": "ToolNotFound"},
+            )
             return {"error": f"Tool not found: {tool_call.name}"}
+        self._telemetry.event("tool.call_started", {"tool": tool_call.name})
         try:
-            return await tool.execute(tool_call.args)
+            result = await tool.execute(tool_call.args)
         except Exception as err:
             _logger.exception("[OOAgent] Tool execution error: %s", tool_call.name)
+            self._telemetry.event(
+                "tool.call_failed",
+                {"tool": tool_call.name, "error_type": type(err).__name__},
+            )
             return {"error": str(err)}
+        self._telemetry.event("tool.call_completed", {"tool": tool_call.name})
+        return result
 
     def _handle_failure(
         self, err: Exception, context: IDomainContext, _snapshot_id: str
     ) -> Artifact:
         self._state.transition("FAILURE")
+        self._telemetry.event(
+            "turn.failed",
+            {"context": context.name, "error_type": type(err).__name__, "recoverable": True},
+        )
         if isinstance(err, ScopeExitError):
             artifact = self._artifact_factory.build_scope_exit(context.name, err.query)
         elif isinstance(err, ConstraintViolationError):
@@ -314,6 +349,10 @@ class OOAgent(LLMAgent[Query, Artifact]):
         unconditionally, bypassing the transition-legality check, which is
         the only way to safely recover from either case."""
         context_name = context.name if context is not None else "unknown"
+        self._telemetry.event(
+            "turn.failed",
+            {"context": context_name, "error_type": type(err).__name__, "recoverable": False},
+        )
         if isinstance(err, ScopeExitError):
             artifact = self._artifact_factory.build_scope_exit(context_name, err.query)
         else:
