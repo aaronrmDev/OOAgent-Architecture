@@ -15,6 +15,9 @@ otel = [
     "opentelemetry-sdk>=1.25",
     "opentelemetry-exporter-otlp-proto-http>=1.25",
 ]
+mcp = [
+    "mcp>=1.28",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
@@ -22,6 +25,9 @@ dev = [
     "mypy>=1.11",
     "ruff>=0.6",
 ]
+
+[project.scripts]
+ooagent-mcp = "ooagent.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]

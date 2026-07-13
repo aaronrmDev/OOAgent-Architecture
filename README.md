@@ -9,7 +9,7 @@
 
 ## What OOAgent Is
 
-Every response is the return value of a deterministic method call on an instantiated class — never ad-hoc generation. The core is agnostic to both **inference backend** (Claude, GPT-4o, Gemini, Llama, Mistral, Ollama) and **problem domain** (engineering, finance, medicine, legal, etc.), both injected at construction time through stable interfaces.
+Every response is the return value of a deterministic method call on an instantiated class — never ad-hoc generation. The core is agnostic to both **inference backend** (Claude, GPT-4o, Gemini, Llama, Mistral, Ollama) and **problem domain** (engineering, finance, medicine, legal, etc.), both injected at construction time through stable interfaces. It can also run as a host-agnostic **MCP plugin** — see [`docs/MCP.md`](docs/MCP.md).
 
 ## Who It's For
 
@@ -58,6 +58,7 @@ Run any of them: `uv run python -m examples.<name>`. Each file's docstring shows
 - [`docs/TESTING.md`](docs/TESTING.md) — how to test adapters without network calls, test doubles, coverage floor
 - [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) — event schema, failure taxonomy, wiring a telemetry backend, policy hooks and redaction
 - [`docs/EXTENDING.md`](docs/EXTENDING.md) — worked examples for adding a domain context, LLM adapter, tool, or plugin
+- [`docs/MCP.md`](docs/MCP.md) — run OOAgent as a host-agnostic MCP plugin (Claude Code, and any other MCP-compliant host)
 - [`docs/adr/`](docs/adr/0000-template.md) — architecture decision records: why the composition root, why SpecDrivenWorkflow is a peer layer, why the curated public API barrel
 - [`CLAUDE.md`](CLAUDE.md) — the full architectural contract: invariants, FSM, failure modes, testing contracts
 - [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — how to contribute

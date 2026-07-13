@@ -37,6 +37,10 @@ plugin, and `IDeliveryWorkflow`/`SpecDrivenWorkflow` (a peer layer per
 `ooagent.core`, `ooagent.adapters.*`, `ooagent.contexts`,
 `ooagent.plugins.*`, `ooagent.telemetry`, or `ooagent.workflow`, exactly
 as [`docs/ARCHITECTURE.md`](ARCHITECTURE.md)'s project-structure section
+describes. `ooagent.mcp` (the MCP server, [`docs/MCP.md`](MCP.md)) is a
+further step removed — it's an optional extra (`pip install
+ooagent[mcp]`), not installed by default, since most consumers of the
+core library have no need for it.
 describes.
 
 ## Stability contract
