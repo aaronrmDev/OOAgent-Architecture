@@ -446,3 +446,56 @@ async def test_tool_execution_times_out_and_reports_failure_not_hang() -> None:
     assert artifact is not None
 
     await agent.dispose()
+
+
+async def test_llm_call_times_out_and_is_handled_as_a_failure() -> None:
+    import asyncio
+
+    class _SlowLLMClient(ILLMClient):
+        async def complete(self, request):
+            await asyncio.sleep(60)
+            return CompletionResponse(
+                content="too slow",
+                stop_reason="end_turn",
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+            )
+
+        async def ping(self) -> bool:
+            return True
+
+        async def stream(self, request):
+            yield CompletionChunk(delta="", done=True)
+
+        @property
+        def model_id(self):
+            return "slow-1"
+
+        @property
+        def vendor(self):
+            return "anthropic"
+
+        @property
+        def max_tokens(self):
+            return 4096
+
+        @property
+        def supports_tools(self):
+            return False
+
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_SlowLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig(turn_timeout_ms=50))
+
+    artifact = await agent.respond(Query(text="hello agent"))
+
+    failed_events = [
+        e
+        for e in telemetry.events
+        if e[0] == "llm.call_failed"
+    ]
+    assert len(failed_events) == 1
+    assert failed_events[0][1]["error_type"] == "TimeoutError"
+    assert artifact is not None
+    assert agent.state.fsm == "IDLE"
+
+    await agent.dispose()

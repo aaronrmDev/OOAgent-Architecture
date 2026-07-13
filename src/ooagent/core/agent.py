@@ -260,8 +260,11 @@ class OOAgent(LLMAgent[Query, Artifact]):
             self._telemetry.event(
                 "llm.call_started", {"round": _round, "vendor": self._llm_client.vendor}
             )
+            timeout_s = (config.turn_timeout_ms if config else 60_000) / 1000
             try:
-                response = await self._llm_client.complete(request)
+                response = await asyncio.wait_for(
+                    self._llm_client.complete(request), timeout=timeout_s
+                )
                 self._lifecycle.record_llm_success()
             except Exception as err:
                 self._lifecycle.record_llm_failure()
