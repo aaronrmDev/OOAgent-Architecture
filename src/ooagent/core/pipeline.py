@@ -104,3 +104,16 @@ def create_step(
             )
 
     return _Step()
+
+
+def empty_query_step() -> PipelineStep:
+    """Generic invariant, always on regardless of active context — §11
+    CLAUDE.md. Lives at the base-pipeline level (not IDomainContext-specific)
+    because every context must reject an empty query identically."""
+
+    async def _check(query: Query, context: IDomainContext) -> dict[str, Any]:
+        if not query.text or not query.text.strip():
+            return {"passed": False, "violation": "Query text must not be empty"}
+        return {"passed": True}
+
+    return create_step("empty_query_guard", _check)

@@ -121,3 +121,20 @@ def test_constraint_engine_does_not_raise_when_invariant_has_no_check() -> None:
         rationale="test",
     )
     engine.assert_all(solution, [no_check])  # should not raise
+
+
+async def test_empty_query_step_fails_on_blank_text() -> None:
+    from ooagent.core.pipeline import empty_query_step
+
+    step = empty_query_step()
+    result = await step.run(Query(text="   "), object())  # type: ignore[arg-type]
+    assert result.passed is False
+    assert "empty" in (result.violation or "").lower()
+
+
+async def test_empty_query_step_passes_on_non_blank_text() -> None:
+    from ooagent.core.pipeline import empty_query_step
+
+    step = empty_query_step()
+    result = await step.run(Query(text="hello"), object())  # type: ignore[arg-type]
+    assert result.passed is True

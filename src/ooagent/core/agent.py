@@ -11,7 +11,11 @@ from typing import Any, Generic
 
 from ooagent.core.artifacts import ArtifactFactory, ProvenanceTracker, ResponseDecorator
 from ooagent.core.lifecycle import LifecycleManager
-from ooagent.core.pipeline import ConstraintEngine, ResponsePipeline
+from ooagent.core.pipeline import (
+    ConstraintEngine,
+    ResponsePipeline,
+    empty_query_step,
+)
 from ooagent.core.protocols import (
     AgentConfig,
     Artifact,
@@ -111,7 +115,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
         self._ctx_registry = ctx_registry or ContextRegistry.get_instance()
         self._tool_registry = tool_registry or ToolRegistry()
         self._plugin_registry = plugin_registry or PluginRegistry()
-        self._pipeline = pipeline or ResponsePipeline()
+        self._pipeline = pipeline or ResponsePipeline([empty_query_step()])
         self._constraint_engine = constraint_engine or ConstraintEngine.get_instance()
         self._artifact_factory = artifact_factory or ArtifactFactory()
         self._decorator = decorator or ResponseDecorator()
