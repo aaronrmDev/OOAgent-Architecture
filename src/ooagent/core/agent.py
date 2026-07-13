@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -312,8 +313,13 @@ class OOAgent(LLMAgent[Query, Artifact]):
             )
             return {"error": f"Tool not found: {tool_call.name}"}
         self._telemetry.event("tool.call_started", {"tool": tool_call.name})
+        timeout_s = (
+            self._config.tool_timeout_ms if self._config else 30_000
+        ) / 1000
         try:
-            result = await tool.execute(tool_call.args)
+            result = await asyncio.wait_for(
+                tool.execute(tool_call.args), timeout=timeout_s
+            )
         except Exception as err:
             _logger.exception("[OOAgent] Tool execution error: %s", tool_call.name)
             self._telemetry.event(

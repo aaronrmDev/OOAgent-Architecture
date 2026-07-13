@@ -412,3 +412,37 @@ async def test_context_resolution_failure_routes_through_failure_state_not_bypas
     ) in telemetry.events
 
     await agent.dispose()
+
+
+async def test_tool_execution_times_out_and_reports_failure_not_hang() -> None:
+    import asyncio
+
+    class _SlowTool(BaseTool):
+        name = "slow"
+        description = "Never returns in time."
+
+        def input_schema(self):
+            return {"type": "object", "properties": {}}
+
+        async def execute(self, args):
+            await asyncio.sleep(60)
+            return {"ok": True}
+
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_ToolUseLLMClient("slow"), telemetry=telemetry)
+    agent._tool_registry.register(_SlowTool())
+    await agent.initialize(AgentConfig(tool_timeout_ms=50))
+
+    artifact = await agent.respond(Query(text="use the slow tool"))
+
+    assert ("tool.call_started", {"tool": "slow"}) in telemetry.events
+    failed_events = [
+        e
+        for e in telemetry.events
+        if e[0] == "tool.call_failed" and e[1]["tool"] == "slow"
+    ]
+    assert len(failed_events) == 1
+    assert failed_events[0][1]["error_type"] == "TimeoutError"
+    assert artifact is not None
+
+    await agent.dispose()
