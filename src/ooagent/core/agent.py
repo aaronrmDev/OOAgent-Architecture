@@ -100,6 +100,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
         tool_registry: ToolRegistry | None = None,
         plugin_registry: PluginRegistry | None = None,
         pipeline: ResponsePipeline | None = None,
+        constraint_engine: ConstraintEngine | None = None,
         artifact_factory: ArtifactFactory | None = None,
         decorator: ResponseDecorator | None = None,
         telemetry: ITelemetryProvider | None = None,
@@ -111,7 +112,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
         self._tool_registry = tool_registry or ToolRegistry()
         self._plugin_registry = plugin_registry or PluginRegistry()
         self._pipeline = pipeline or ResponsePipeline()
-        self._constraint_engine = ConstraintEngine.get_instance()
+        self._constraint_engine = constraint_engine or ConstraintEngine.get_instance()
         self._artifact_factory = artifact_factory or ArtifactFactory()
         self._decorator = decorator or ResponseDecorator()
         self._provenance = ProvenanceTracker()

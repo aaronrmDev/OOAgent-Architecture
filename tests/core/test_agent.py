@@ -88,6 +88,22 @@ async def test_agent_id_is_generated_when_not_supplied() -> None:
     assert len(agent.agent_id) > 0
 
 
+async def test_constraint_engine_is_injectable_and_defaults_to_singleton() -> None:
+    from ooagent.core.pipeline import ConstraintEngine
+
+    default_agent = OOAgent(llm_client=_StubLLMClient())
+    assert default_agent._constraint_engine is ConstraintEngine.get_instance()
+
+    custom_engine = ConstraintEngine()
+    injected_agent = OOAgent(
+        llm_client=_StubLLMClient(), constraint_engine=custom_engine
+    )
+    assert injected_agent._constraint_engine is custom_engine
+    assert (
+        injected_agent._constraint_engine is not ConstraintEngine.get_instance()
+    )
+
+
 async def test_respond_recovers_when_artifact_factory_raises_during_delivering() -> None:
     # Bug 1 regression: an exception raised inside the DELIVERING block (e.g.
     # from a third-party ResponseDecorator — a legitimate OCP extension point)
