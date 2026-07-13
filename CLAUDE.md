@@ -379,7 +379,7 @@ LifecycleManager responsibilities:
   5. Finalizer registration:   register dispose() with process exit handlers
   6. Timeout enforcement:      per-turn and per-tool-call timeout budgets
   7. Memory pressure:          evict LRU Memento entries when SessionState exceeds max size
-  8. Circuit breaker:          after N consecutive ILLMClient failures → DEGRADED state
+  8. Circuit breaker:          after N consecutive ILLMClient failures → HealthStatus reports "degraded"
 ```
 
 **Rule:** every object that holds an external resource (`ILLMClient`,

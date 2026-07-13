@@ -6,7 +6,13 @@ import atexit
 import logging
 import signal
 
-from ooagent.core.protocols import AgentConfig, HealthStatus, ILifecycle, LifecycleError
+from ooagent.core.protocols import (
+    AgentConfig,
+    HealthStatus,
+    ILifecycle,
+    ILLMClient,
+    LifecycleError,
+)
 from ooagent.core.registry import PluginRegistry
 from ooagent.core.state import SessionState
 
@@ -40,9 +46,15 @@ class CircuitBreaker:
 
 
 class LifecycleManager(ILifecycle):
-    def __init__(self, plugin_registry: PluginRegistry, state: SessionState) -> None:
+    def __init__(
+        self,
+        plugin_registry: PluginRegistry,
+        state: SessionState,
+        llm_client: ILLMClient | None = None,
+    ) -> None:
         self._plugin_registry = plugin_registry
         self._state = state
+        self._llm_client = llm_client
         self._ready = False
         self._disposed = False
         self._circuit_breaker: CircuitBreaker | None = None
@@ -66,6 +78,13 @@ class LifecycleManager(ILifecycle):
     async def health_check(self) -> HealthStatus:
         if not self._ready:
             return "unhealthy"
+        if self._llm_client is not None:
+            try:
+                reachable = await self._llm_client.ping()
+            except Exception:
+                return "unhealthy"
+            if not reachable:
+                return "unhealthy"
         if self._circuit_breaker is not None and self._circuit_breaker.is_open:
             return "degraded"
         return "healthy"

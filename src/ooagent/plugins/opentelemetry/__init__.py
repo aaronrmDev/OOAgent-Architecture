@@ -73,6 +73,8 @@ class OtelTelemetryProvider(ITelemetryProvider):
         self._sdk: Any = None
         self._tracer: Any = None
         self._meter: Any = None
+        self._gauge_values: dict[str, float] = {}
+        self._gauge_instruments: dict[str, Any] = {}
 
     async def init(self) -> None:
         try:
@@ -144,7 +146,21 @@ class OtelTelemetryProvider(ITelemetryProvider):
         if self._meter is None:
             print(f"[otel.gauge] {name} = {value}")
             return
-        self._meter.create_observable_gauge(name)
+        self._gauge_values[name] = value
+        if name not in self._gauge_instruments:
+            self._gauge_instruments[name] = self._meter.create_observable_gauge(
+                name, callbacks=[self._make_gauge_callback(name)]
+            )
+
+    def _make_gauge_callback(self, name: str) -> Callable[[Any], Any]:
+        def _callback(_options: Any) -> Any:
+            from opentelemetry.metrics import (  # type: ignore[import-not-found, unused-ignore]
+                Observation,
+            )
+
+            return [Observation(self._gauge_values[name])]
+
+        return _callback
 
     def histogram(self, name: str, value: float) -> None:
         if self._meter is None:

@@ -16,21 +16,25 @@ from ooagent.mcp.config import ConfigError, build_agent, build_llm_client
 def test_build_llm_client_anthropic() -> None:
     client = build_llm_client({"OOAGENT_LLM_VENDOR": "anthropic", "ANTHROPIC_API_KEY": "key-1"})
     assert isinstance(client, AnthropicLLMClient)
+    assert client._api_key == "key-1"
 
 
 def test_build_llm_client_openai() -> None:
     client = build_llm_client({"OOAGENT_LLM_VENDOR": "openai", "OPENAI_API_KEY": "key-2"})
     assert isinstance(client, OpenAILLMClient)
+    assert client._api_key == "key-2"
 
 
 def test_build_llm_client_gemini() -> None:
     client = build_llm_client({"OOAGENT_LLM_VENDOR": "gemini", "GEMINI_API_KEY": "key-3"})
     assert isinstance(client, GeminiLLMClient)
+    assert client._api_key == "key-3"
 
 
 def test_build_llm_client_ollama_needs_no_api_key() -> None:
     client = build_llm_client({"OOAGENT_LLM_VENDOR": "ollama"})
     assert isinstance(client, OllamaLLMClient)
+    assert client._model_id == "llama3.3"
 
 
 def test_build_llm_client_missing_vendor_raises() -> None:

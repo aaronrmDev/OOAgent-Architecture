@@ -61,7 +61,7 @@ async def test_cache_plugin_caches_tool_result_on_second_call() -> None:
 
 
 def test_logging_plugin_writes_through_custom_sink() -> None:
-    lines = []
+    lines: list[str] = []
     plugin = LoggingPlugin(LoggingPluginOptions(sink=lines.append))
     plugin.on_register(_FakeAgent())
     assert any("registered" in line for line in lines)

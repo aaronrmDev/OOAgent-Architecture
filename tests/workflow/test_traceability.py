@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ooagent.core.protocols import TraceabilityEntry
 from ooagent.workflow.traceability import verify_traceability
 
@@ -85,3 +87,80 @@ def test_verify_traceability_processes_multiple_entries_independently() -> None:
     assert len(results) == 2
     assert results[0].passed is True
     assert results[1].passed is False
+
+
+def test_scan_spec_directory_resolves_a_fully_matched_req_ac_task_test(
+    tmp_path: Path,
+) -> None:
+    from ooagent.workflow.traceability import scan_spec_directory
+
+    spec_dir = tmp_path / "specs" / "001-example"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text(
+        "## Requirements\n\n"
+        "- **REQ-1**: something must exist.\n"
+        "  - **AC-1**: something is verifiably true.\n",
+        encoding="utf-8",
+    )
+    (spec_dir / "tasks.md").write_text(
+        "- [ ] **TASK-1** [P] Add the thing — file: `src/x.py` — "
+        "implements REQ-1/AC-1\n"
+        "  - **TEST-1**: `tests/test_x.py::test_thing_exists`\n",
+        encoding="utf-8",
+    )
+
+    (entry,) = scan_spec_directory(spec_dir)
+    assert entry.req_id == "REQ-1"
+    assert entry.ac_id == "AC-1"
+    assert entry.task_id == "TASK-1"
+    assert entry.test_id == "tests/test_x.py::test_thing_exists"
+
+
+def test_scan_spec_directory_flags_a_req_with_no_implementing_task_as_orphan(
+    tmp_path: Path,
+) -> None:
+    from ooagent.workflow.traceability import scan_spec_directory
+
+    spec_dir = tmp_path / "specs" / "999-orphan"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "spec.md").write_text(
+        "- **REQ-1**: something must exist.\n  - **AC-1**: something is true.\n",
+        encoding="utf-8",
+    )
+    (spec_dir / "tasks.md").write_text(
+        "- [ ] **TASK-1** does unrelated work\n  - **TEST-1**: `tests/test_y.py::test_y`\n",
+        encoding="utf-8",
+    )
+
+    (entry,) = scan_spec_directory(spec_dir)
+    assert entry.task_id is None
+    assert entry.test_id is None
+
+
+def test_scan_spec_directory_returns_empty_tuple_when_artifacts_missing(
+    tmp_path: Path,
+) -> None:
+    from ooagent.workflow.traceability import scan_spec_directory
+
+    empty_dir = tmp_path / "specs" / "000-empty"
+    empty_dir.mkdir(parents=True)
+
+    assert scan_spec_directory(empty_dir) == ()
+
+
+def test_traceability_module_resolves_this_repos_own_spec_001() -> None:
+    # The actual self-hosted proof, done through the Python module this time
+    # instead of only scripts/sdd-verify-spec.sh (which duplicates this same
+    # check in bash and is the thing CI currently runs).
+    from ooagent.workflow.traceability import scan_specs_root, verify_traceability
+
+    repo_root = Path(__file__).resolve().parents[2]
+    entries = scan_specs_root(repo_root / "specs")
+
+    assert len(entries) >= 6, (
+        "expected at least 6 REQ/AC pairs from specs/001-spec-driven-workflow-layer"
+    )
+
+    results = verify_traceability(entries)
+    failing = [r for r in results if not r.passed]
+    assert failing == [], f"orphan traceability entries found: {failing}"

@@ -64,3 +64,28 @@ def test_verify_traceability_delegates_to_traceability_module() -> None:
     )
     (result,) = workflow.verify_traceability((entry,))
     assert result.passed is True
+
+
+def test_verify_traceability_for_specs_root_resolves_this_repos_spec_001() -> None:
+    from pathlib import Path
+
+    from ooagent.workflow.spec_driven import SpecDrivenWorkflow
+
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = SpecDrivenWorkflow()
+
+    results = workflow.verify_traceability_for_specs_root(repo_root / "specs")
+
+    assert len(results) >= 6
+    assert all(r.passed for r in results)
+
+
+def test_spec_001_tasks_md_has_no_stale_unchecked_boxes() -> None:
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    tasks_md = (repo_root / "specs" / "001-spec-driven-workflow-layer" / "tasks.md").read_text(
+        encoding="utf-8"
+    )
+    msg = "spec 001 is fully implemented and merged — all tasks should be checked"
+    assert "- [ ]" not in tasks_md, msg

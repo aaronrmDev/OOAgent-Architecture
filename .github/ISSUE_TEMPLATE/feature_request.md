@@ -20,8 +20,8 @@ assignees: ''
      Draft the interface here BEFORE implementation.
      The interface is the spec — implementation follows the spec. -->
 
-```typescript
-// Proposed interface or extension
+```python
+# Proposed interface or extension
 ```
 
 ## AI Safety Considerations

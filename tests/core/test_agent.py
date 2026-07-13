@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from ooagent.adapters.tools.base import BaseTool
@@ -27,6 +29,9 @@ class _StubLLMClient(ILLMClient):
             stop_reason="end_turn",
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
+
+    async def ping(self) -> bool:
+        return True
 
     async def stream(self, request):
         yield CompletionChunk(delta="hi", done=True)
@@ -88,6 +93,18 @@ async def test_agent_id_is_generated_when_not_supplied() -> None:
     assert len(agent.agent_id) > 0
 
 
+async def test_constraint_engine_is_injectable_and_defaults_to_singleton() -> None:
+    from ooagent.core.pipeline import ConstraintEngine
+
+    default_agent = OOAgent(llm_client=_StubLLMClient())
+    assert default_agent._constraint_engine is ConstraintEngine.get_instance()
+
+    custom_engine = ConstraintEngine()
+    injected_agent = OOAgent(llm_client=_StubLLMClient(), constraint_engine=custom_engine)
+    assert injected_agent._constraint_engine is custom_engine
+    assert injected_agent._constraint_engine is not ConstraintEngine.get_instance()
+
+
 async def test_respond_recovers_when_artifact_factory_raises_during_delivering() -> None:
     # Bug 1 regression: an exception raised inside the DELIVERING block (e.g.
     # from a third-party ResponseDecorator — a legitimate OCP extension point)
@@ -118,6 +135,9 @@ class _AlwaysFailingLLMClient(ILLMClient):
     async def complete(self, request):
         raise RuntimeError("llm down")
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request):
         yield CompletionChunk(delta="", done=True)
 
@@ -140,7 +160,7 @@ class _AlwaysFailingLLMClient(ILLMClient):
 
 class _RecordingTelemetry(ITelemetryProvider):
     def __init__(self) -> None:
-        self.events: list[tuple[str, dict]] = []
+        self.events: list[tuple[str, dict[str, Any]]] = []
 
     async def span(self, name, fn):
         return await fn()
@@ -179,6 +199,9 @@ class _ToolUseLLMClient(ILLMClient):
             stop_reason="end_turn",
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
+
+    async def ping(self) -> bool:
+        return True
 
     async def stream(self, request):
         yield CompletionChunk(delta="", done=True)
@@ -357,5 +380,192 @@ async def test_turn_failed_event_fires_recoverable_false_on_delivering_failure()
         "turn.failed",
         {"context": "NullContext", "error_type": "RuntimeError", "recoverable": False},
     ) in telemetry.events
+
+    await agent.dispose()
+
+
+async def test_context_resolution_failure_routes_through_failure_state_not_bypass() -> None:
+    # §12 CLAUDE.md: "FAILURE always leads to DELIVERING (emit error artifact)
+    # then IDLE." A failure during the GATHERING prelude (context resolution)
+    # has GATHERING -> FAILURE as a legal transition (state.py VALID_TRANSITIONS),
+    # so it must not use the FSM-bypassing _handle_unrecoverable_failure path.
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_StubLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    def _boom(query):
+        raise RuntimeError("resolve boom")
+
+    agent._ctx_registry.resolve = _boom  # type: ignore[method-assign]
+
+    artifact = await agent.respond(Query(text="hello agent"))
+
+    assert "resolve boom" in artifact.content
+    assert agent.state.fsm == "IDLE"
+    assert (
+        "turn.failed",
+        {"context": "unknown", "error_type": "RuntimeError", "recoverable": True},
+    ) in telemetry.events
+
+    await agent.dispose()
+
+
+async def test_tool_execution_times_out_and_reports_failure_not_hang() -> None:
+    import asyncio
+
+    class _SlowTool(BaseTool):
+        name = "slow"
+        description = "Never returns in time."
+
+        def input_schema(self):
+            return {"type": "object", "properties": {}}
+
+        async def execute(self, args):
+            await asyncio.sleep(60)
+            return {"ok": True}
+
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_ToolUseLLMClient("slow"), telemetry=telemetry)
+    agent._tool_registry.register(_SlowTool())
+    await agent.initialize(AgentConfig(tool_timeout_ms=50))
+
+    artifact = await agent.respond(Query(text="use the slow tool"))
+
+    assert ("tool.call_started", {"tool": "slow"}) in telemetry.events
+    failed_events = [
+        e for e in telemetry.events if e[0] == "tool.call_failed" and e[1]["tool"] == "slow"
+    ]
+    assert len(failed_events) == 1
+    assert failed_events[0][1]["error_type"] == "TimeoutError"
+    assert artifact is not None
+
+    await agent.dispose()
+
+
+async def test_llm_call_times_out_and_is_handled_as_a_failure() -> None:
+    import asyncio
+
+    class _SlowLLMClient(ILLMClient):
+        async def complete(self, request):
+            await asyncio.sleep(60)
+            return CompletionResponse(
+                content="too slow",
+                stop_reason="end_turn",
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+            )
+
+        async def ping(self) -> bool:
+            return True
+
+        async def stream(self, request):
+            yield CompletionChunk(delta="", done=True)
+
+        @property
+        def model_id(self):
+            return "slow-1"
+
+        @property
+        def vendor(self):
+            return "anthropic"
+
+        @property
+        def max_tokens(self):
+            return 4096
+
+        @property
+        def supports_tools(self):
+            return False
+
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_SlowLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig(turn_timeout_ms=50))
+
+    artifact = await agent.respond(Query(text="hello agent"))
+
+    failed_events = [e for e in telemetry.events if e[0] == "llm.call_failed"]
+    assert len(failed_events) == 1
+    assert failed_events[0][1]["error_type"] == "TimeoutError"
+    assert artifact is not None
+    assert agent.state.fsm == "IDLE"
+
+    await agent.dispose()
+
+
+async def test_turn_timeout_ms_bounds_the_whole_turn_not_each_round() -> None:
+    # Regression for the "turn_timeout_ms applied per round" bug: each round
+    # here takes 40ms — comfortably under the 90ms turn_timeout_ms budget on
+    # its own — but three rounds cumulatively take ~120ms, which must exceed
+    # a *whole-turn* budget of 90ms. Under the old per-round-reset bug, every
+    # round would get a fresh 90ms allowance and the turn would succeed after
+    # ~120ms of real time; with the fix, the deadline is fixed at turn start
+    # and the 3rd round starts with only ~10ms of remaining budget, so its
+    # asyncio.wait_for times out immediately.
+    import asyncio
+
+    class _FixedDelayToolUseLLMClient(ILLMClient):
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def complete(self, request):
+            self._calls += 1
+            await asyncio.sleep(0.04)
+            if self._calls <= 2:
+                return CompletionResponse(
+                    content="",
+                    stop_reason="tool_use",
+                    usage=TokenUsage(input_tokens=1, output_tokens=1),
+                    tool_calls=[ToolCall(id=f"call-{self._calls}", name="noop", args={})],
+                )
+            return CompletionResponse(
+                content="done",
+                stop_reason="end_turn",
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+            )
+
+        async def ping(self) -> bool:
+            return True
+
+        async def stream(self, request):
+            yield CompletionChunk(delta="", done=True)
+
+        @property
+        def model_id(self):
+            return "fixed-delay-1"
+
+        @property
+        def vendor(self):
+            return "anthropic"
+
+        @property
+        def max_tokens(self):
+            return 4096
+
+        @property
+        def supports_tools(self):
+            return True
+
+    class _NoopTool(BaseTool):
+        name = "noop"
+        description = "does nothing"
+
+        def input_schema(self):
+            return {"type": "object", "properties": {}, "required": []}
+
+        async def execute(self, args):
+            return {"ok": True}
+
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_FixedDelayToolUseLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig(turn_timeout_ms=90, max_tool_rounds=5))
+    agent._tool_registry.register(_NoopTool())
+
+    artifact = await agent.respond(Query(text="hello agent"))
+
+    failed_events = [e for e in telemetry.events if e[0] == "llm.call_failed"]
+    assert len(failed_events) == 1
+    assert failed_events[0][1]["error_type"] == "TimeoutError"
+    assert failed_events[0][1]["round"] in (1, 2)
+    assert artifact is not None
+    assert agent.state.fsm == "IDLE"
 
     await agent.dispose()

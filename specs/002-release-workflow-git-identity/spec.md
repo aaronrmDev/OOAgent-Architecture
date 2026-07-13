@@ -59,7 +59,9 @@ REQ-1 holds, verified by its paired test (see `tasks.md`), and
   named misnomer — it publishes to PyPI, not npm) and whether a
   `PYPI_TOKEN`/`UV_PUBLISH_TOKEN` secret should be configured — no
   secret is configured today, so that job fails harmlessly; not this
-  spec's concern.
+  spec's concern. (The name itself was later corrected to `publish-pypi`
+  as part of a broader TypeScript-remnant cleanup — the secret/behavior
+  question this spec deferred is still open.)
 - Re-running the v2026.07.01 release's automated tag/release job now
   that the fix exists — that release is already tagged and published
   (created manually, verified working); this spec exists so the *next*

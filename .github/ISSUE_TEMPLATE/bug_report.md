@@ -12,8 +12,8 @@ assignees: ''
 
 ## Reproduction
 
-```typescript
-// Minimal reproduction case
+```python
+# Minimal reproduction case
 ```
 
 ## Expected behavior
@@ -29,7 +29,7 @@ assignees: ''
 <!-- If the agent crashed or hung, what FSM state was it in?
      Check SessionState.fsm and the FSMTrace. -->
 
-- FSM state: <!-- IDLE / GATHERING / MODELING / SOLVING / VALIDATING / DELIVERING / FAILURE / DEGRADED -->
+- FSM state: <!-- IDLE / GATHERING / AWAITING / MODELING / SOLVING / VALIDATING / DELIVERING / FAILURE -->
 - Turn number: <!-- SessionState.turn -->
 - Active context: <!-- IDomainContext.name + version -->
 
@@ -46,5 +46,5 @@ assignees: ''
 - OOAgent version: <!-- e.g. 2026.06.01 -->
 - LLM backend: <!-- Anthropic / OpenAI / Gemini / Ollama -->
 - Model ID: <!-- e.g. claude-opus-4-8 -->
-- Node.js version:
+- Python version:
 - OS:

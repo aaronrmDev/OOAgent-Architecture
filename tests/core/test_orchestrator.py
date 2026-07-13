@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+
+import pytest
+
 from ooagent.core.orchestrator import MultiAgentOrchestrator, SignalBus
-from ooagent.core.protocols import ArtifactPolicy, IDomainContext, ProblemClass, Query
+from ooagent.core.protocols import AgentConfig, ArtifactPolicy, IDomainContext, ProblemClass, Query
 
 
 class _StubContext(IDomainContext):
@@ -97,3 +101,33 @@ async def test_dispatch_captures_specialist_errors_as_solution() -> None:
     orchestrator = MultiAgentOrchestrator(lambda ctx: _FailingAgent())
     solutions = await orchestrator.dispatch(Query(text="hi"), [_StubContext("Broken")])
     assert "[SpecialistError] Broken" in solutions[0].content
+
+
+async def test_slow_specialist_times_out_and_yields_error_solution_without_hanging() -> None:
+    class _HangingAgent:
+        async def respond(self, query: Query) -> str:
+            await asyncio.sleep(5.0)
+            return "never"
+
+    config = AgentConfig(specialist_timeout_ms=30, orchestration_timeout_ms=5_000)
+    orchestrator = MultiAgentOrchestrator(lambda ctx: _HangingAgent(), config=config)
+    solutions = await orchestrator.dispatch(Query(text="hi"), [_StubContext("Slow")])
+    assert len(solutions) == 1
+    assert "[SpecialistError] Slow" in solutions[0].content
+
+
+async def test_orchestration_timeout_raises_when_aggregate_specialist_time_exceeds_it() -> None:
+    class _SlowAgent:
+        async def respond(self, query: Query) -> str:
+            await asyncio.sleep(0.05)
+            return "ok"
+
+    # Each specialist individually finishes well within its own timeout,
+    # but the orchestration-level ceiling is smaller than one round-trip,
+    # so dispatch() itself must time out rather than hang.
+    config = AgentConfig(specialist_timeout_ms=5_000, orchestration_timeout_ms=10)
+    orchestrator = MultiAgentOrchestrator(lambda ctx: _SlowAgent(), config=config, concurrency=1)
+    with pytest.raises(TimeoutError):
+        await orchestrator.dispatch(
+            Query(text="hi"), [_StubContext("A"), _StubContext("B"), _StubContext("C")]
+        )

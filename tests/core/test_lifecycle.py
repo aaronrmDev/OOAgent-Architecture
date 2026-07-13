@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 import pytest
 
 from ooagent.core.lifecycle import CircuitBreaker, LifecycleManager
-from ooagent.core.protocols import AgentConfig, LifecycleError
+from ooagent.core.protocols import (
+    AgentConfig,
+    CompletionChunk,
+    CompletionRequest,
+    CompletionResponse,
+    ILLMClient,
+    LifecycleError,
+    LLMVendor,
+)
 from ooagent.core.registry import PluginRegistry
 from ooagent.core.state import SessionState
 
@@ -56,3 +66,71 @@ async def test_health_check_reports_degraded_when_circuit_breaker_open() -> None
     await manager.initialize(AgentConfig(circuit_breaker_threshold=1))
     manager.record_llm_failure()
     assert await manager.health_check() == "degraded"
+
+
+async def test_health_check_reports_unhealthy_when_llm_ping_fails() -> None:
+    """Test that health_check returns 'unhealthy' when LLM ping fails."""
+
+    class _UnreachableLLMClient(ILLMClient):
+        async def complete(self, request: CompletionRequest) -> CompletionResponse:
+            raise NotImplementedError
+
+        async def ping(self) -> bool:
+            return False
+
+        def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
+            raise NotImplementedError
+
+        @property
+        def model_id(self) -> str:
+            return "unreachable"
+
+        @property
+        def vendor(self) -> LLMVendor:
+            return "anthropic"
+
+        @property
+        def max_tokens(self) -> int:
+            return 1
+
+        @property
+        def supports_tools(self) -> bool:
+            return False
+
+    manager = LifecycleManager(PluginRegistry(), SessionState(), llm_client=_UnreachableLLMClient())
+    await manager.initialize(AgentConfig())
+    assert await manager.health_check() == "unhealthy"
+
+
+async def test_health_check_reports_unhealthy_when_llm_ping_raises() -> None:
+    """Test that health_check returns 'unhealthy' when LLM ping raises an exception."""
+
+    class _ExplodingLLMClient(ILLMClient):
+        async def complete(self, request: CompletionRequest) -> CompletionResponse:
+            raise NotImplementedError
+
+        async def ping(self) -> bool:
+            raise RuntimeError("connection refused")
+
+        def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
+            raise NotImplementedError
+
+        @property
+        def model_id(self) -> str:
+            return "exploding"
+
+        @property
+        def vendor(self) -> LLMVendor:
+            return "anthropic"
+
+        @property
+        def max_tokens(self) -> int:
+            return 1
+
+        @property
+        def supports_tools(self) -> bool:
+            return False
+
+    manager = LifecycleManager(PluginRegistry(), SessionState(), llm_client=_ExplodingLLMClient())
+    await manager.initialize(AgentConfig())
+    assert await manager.health_check() == "unhealthy"
