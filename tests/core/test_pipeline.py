@@ -26,7 +26,7 @@ async def test_pipeline_runs_steps_in_order_and_merges_extras() -> None:
         return {"passed": True, "extras": {"b": 2}}
 
     pipeline = ResponsePipeline([create_step("a", step_a), create_step("b", step_b)])
-    extras = await pipeline.run(Query(text="hi"), object())  # type: ignore[arg-type]
+    extras = await pipeline.run(Query(text="hi"), object())
     assert extras == {"a": 1, "b": 2}
 
 
@@ -36,7 +36,7 @@ async def test_pipeline_raises_constraint_violation_on_failed_step() -> None:
 
     pipeline = ResponsePipeline([create_step("failing", failing)])
     with pytest.raises(ConstraintViolationError) as exc_info:
-        await pipeline.run(Query(text="hi"), object())  # type: ignore[arg-type]
+        await pipeline.run(Query(text="hi"), object())
     assert exc_info.value.invariant_name == "failing"
 
 
@@ -127,7 +127,7 @@ async def test_empty_query_step_fails_on_blank_text() -> None:
     from ooagent.core.pipeline import empty_query_step
 
     step = empty_query_step()
-    result = await step.run(Query(text="   "), object())  # type: ignore[arg-type]
+    result = await step.run(Query(text="   "), object())
     assert result.passed is False
     assert "empty" in (result.violation or "").lower()
 
@@ -136,5 +136,5 @@ async def test_empty_query_step_passes_on_non_blank_text() -> None:
     from ooagent.core.pipeline import empty_query_step
 
     step = empty_query_step()
-    result = await step.run(Query(text="hello"), object())  # type: ignore[arg-type]
+    result = await step.run(Query(text="hello"), object())
     assert result.passed is True

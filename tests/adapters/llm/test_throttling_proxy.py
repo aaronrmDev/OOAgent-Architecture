@@ -118,7 +118,7 @@ async def test_throttling_proxy_sleeps_when_token_bucket_is_exhausted(
 
     inner = _StubInnerClient()
     proxy = ThrottlingLLMProxy(inner, ThrottlingOptions(requests_per_minute=60))
-    proxy._tokens = 0  # type: ignore[attr-defined]  # force the exhausted-bucket path
+    proxy._tokens = 0  # force the exhausted-bucket path
 
     await proxy.complete(CompletionRequest(messages=[Message(role="user", content="hi")]))
 
@@ -131,17 +131,17 @@ def test_refill_replenishes_tokens_proportional_to_elapsed_time() -> None:
     test fast and deterministic (CLAUDE.md §17)."""
     inner = _StubInnerClient()
     proxy = ThrottlingLLMProxy(inner, ThrottlingOptions(requests_per_minute=60))
-    proxy._tokens = 0  # type: ignore[attr-defined]
-    proxy._last_refill -= 30.0  # type: ignore[attr-defined]  # simulate 30s elapsed
-    proxy._refill()  # type: ignore[attr-defined]
+    proxy._tokens = 0
+    proxy._last_refill -= 30.0  # simulate 30s elapsed
+    proxy._refill()
     # 60 requests/minute * (30s / 60s) = 30 tokens refilled
-    assert proxy._tokens == 30  # type: ignore[attr-defined]
+    assert proxy._tokens == 30
 
 
 def test_refill_caps_tokens_at_requests_per_minute() -> None:
     inner = _StubInnerClient()
     proxy = ThrottlingLLMProxy(inner, ThrottlingOptions(requests_per_minute=60))
-    proxy._tokens = 50  # type: ignore[attr-defined]
-    proxy._last_refill -= 120.0  # type: ignore[attr-defined]  # simulate 2 minutes elapsed
-    proxy._refill()  # type: ignore[attr-defined]
-    assert proxy._tokens == 60  # type: ignore[attr-defined]
+    proxy._tokens = 50
+    proxy._last_refill -= 120.0  # simulate 2 minutes elapsed
+    proxy._refill()
+    assert proxy._tokens == 60

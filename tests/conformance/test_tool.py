@@ -89,7 +89,7 @@ async def test_http_fetch_tool_executes_successfully_against_a_mock_transport(
 
     def _mock_client(*args: object, **kwargs: object) -> httpx.AsyncClient:
         kwargs["transport"] = httpx.MockTransport(_handler)
-        return real_async_client(*args, **kwargs)  # type: ignore[arg-type]
+        return real_async_client(*args, **kwargs)
 
     monkeypatch.setattr(httpx, "AsyncClient", _mock_client)
 
