@@ -354,8 +354,11 @@ class ILLMClient(ABC):
     @abstractmethod
     async def complete(self, request: CompletionRequest) -> CompletionResponse: ...
 
-    @abstractmethod
-    async def ping(self) -> bool: ...
+    async def ping(self) -> bool:
+        """Health-probe hook — LifecycleManager.health_check() calls this.
+        Default: always reachable. Override to report real connectivity
+        (a network round-trip, a lightweight API call, etc.)."""
+        return True
 
     @abstractmethod
     def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]: ...

@@ -46,8 +46,40 @@ def test_illmclient_cannot_be_instantiated_directly() -> None:
         ILLMClient()  # type: ignore[abstract]
 
 
-def test_illmclient_ping_is_a_required_abstract_method() -> None:
-    assert "ping" in ILLMClient.__abstractmethods__
+async def test_illmclient_ping_has_a_non_breaking_default_implementation() -> None:
+    # ping() must NOT be abstract — requiring every ILLMClient implementer to
+    # define it would be a breaking change. It ships a concrete default
+    # (mirrors IPlugin.self_check()'s pattern) that implementers may override
+    # to report real connectivity.
+    assert "ping" not in ILLMClient.__abstractmethods__
+
+    class _MinimalLLMClient(ILLMClient):
+        async def complete(self, request):  # pragma: no cover - not exercised
+            raise NotImplementedError
+
+        def stream(self, request):  # pragma: no cover - not exercised
+            raise NotImplementedError
+
+        @property
+        def model_id(self) -> str:
+            return "minimal"
+
+        @property
+        def vendor(self):
+            return "anthropic"
+
+        @property
+        def max_tokens(self) -> int:
+            return 1
+
+        @property
+        def supports_tools(self) -> bool:
+            return False
+
+    assert _MinimalLLMClient.ping is ILLMClient.ping
+
+    client = _MinimalLLMClient()
+    assert await client.ping() is True
 
 
 def test_tool_execution_error_preserves_message_and_call_args() -> None:
