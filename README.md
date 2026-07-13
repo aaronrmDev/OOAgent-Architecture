@@ -9,7 +9,7 @@
 
 ## What OOAgent Is
 
-Every response is the return value of a deterministic method call on an instantiated class — never ad-hoc generation. The core is agnostic to both **inference backend** (Claude, GPT-4o, Gemini, Llama, Mistral, Ollama) and **problem domain** (engineering, finance, medicine, legal, etc.), both injected at construction time through stable interfaces.
+Every response is the return value of a deterministic method call on an instantiated class — never ad-hoc generation. The core is agnostic to both **inference backend** (Claude, GPT-4o, Gemini, Llama, Mistral, Ollama) and **problem domain** (engineering, finance, medicine, legal, etc.), both injected at construction time through stable interfaces. It can also run as a host-agnostic **MCP plugin** — see [`docs/MCP.md`](docs/MCP.md).
 
 ## Who It's For
 

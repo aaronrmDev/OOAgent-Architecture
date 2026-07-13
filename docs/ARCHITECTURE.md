@@ -67,14 +67,22 @@ src/ooagent/
 │   ├── base_plugin.py    # AbstractPlugin — reduces IPlugin boilerplate
 │   └── logging/ audit/ cache/ rate_limit/ scope_guard/ security/ opentelemetry/ tool_kit/
 │
-└── telemetry/
-    ├── null_telemetry.py # NullTelemetry (no-op — default)
-    ├── otel.py           # OpenTelemetryProvider
-    └── console.py        # ConsoleTelemetry (development)
+├── telemetry/
+│   ├── null_telemetry.py # NullTelemetry (no-op — default)
+│   ├── otel.py           # OpenTelemetryProvider
+│   └── console.py        # ConsoleTelemetry (development)
+│
+├── workflow/              # IDeliveryWorkflow — SpecDrivenWorkflow layer (CLAUDE.md §24)
+│   └── spec_driven.py     # SpecDrivenWorkflow — sole IDeliveryWorkflow implementation
+│
+└── mcp/                   # OOAgent as an MCP server — see docs/MCP.md
+    ├── config.py           # env-var → OOAgent construction
+    └── server.py           # FastMCP server: respond tool, contexts resource
 
 tests/
 ├── core/ adapters/ plugins/  # Unit tests mirroring src/ooagent/
 ├── conformance/              # IAgent / IDomainContext / ITool / ILLMClient conformance suites
+├── workflow/ mcp/            # SpecDrivenWorkflow and MCP server tests
 ├── stub_llm_client.py        # Deterministic ILLMClient for unit tests
 ├── null_context.py           # Re-exports NullContext
 └── fixtures.py                # Common test doubles

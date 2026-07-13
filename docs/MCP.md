@@ -50,6 +50,12 @@ ooagent-mcp` can be replaced with `uvx --from 'ooagent[mcp]' ooagent-mcp`
 
 - Only `NullContext` is registered — a custom `IDomainContext` requires
   forking/extending `ooagent/mcp/config.py` today, not a runtime option.
-- Verified against Claude Code as the first host. Other MCP-compliant
-  hosts should work identically (MCP is one protocol), but that hasn't
-  been verified against each one yet.
+- Registration and the MCP stdio handshake are confirmed working
+  against a real Claude Code session (`claude mcp add` /
+  `claude mcp list` show a genuine connection using the shipped
+  `ooagent-mcp` entry point). A live `respond` tool call through a host
+  has not yet been confirmed end-to-end — that needs a session restart
+  (MCP servers added mid-session aren't picked up by the current
+  session's own tool index) plus a real LLM credential or a reachable
+  Ollama instance. Other MCP-compliant hosts should work identically
+  (MCP is one protocol), but haven't been tried at all yet.

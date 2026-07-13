@@ -425,14 +425,26 @@ src/ooagent/
 │   ├── tool_kit/              # CalculatorTool, DatetimeTool, HttpFetchTool
 │   └── [plugin-name]/        # User-supplied IPlugin implementations
 │
-└── telemetry/
-    ├── null_telemetry.py     # NullTelemetry (Null Object — default)
-    ├── otel.py               # OpenTelemetryProvider (ITelemetryProvider)
-    └── console.py            # ConsoleTelemetry (development)
+├── telemetry/
+│   ├── null_telemetry.py     # NullTelemetry (Null Object — default)
+│   ├── otel.py               # OpenTelemetryProvider (ITelemetryProvider)
+│   └── console.py            # ConsoleTelemetry (development)
+│
+├── workflow/                 # IDeliveryWorkflow — SpecDrivenWorkflow layer (see §24)
+│   ├── spec_driven.py        # SpecDrivenWorkflow — sole IDeliveryWorkflow implementation
+│   ├── constitution.py       # 8-Article constitution (machine-readable ARTICLES)
+│   ├── gate_catalog.py       # 19-target gate catalog (GATE_TARGETS)
+│   └── traceability.py       # Orphan-detection logic for spec → task → test → code
+│
+└── mcp/                      # OOAgent as an MCP (Model Context Protocol) server — see docs/MCP.md
+    ├── config.py              # env-var → OOAgent construction (vendor/API-key dispatch)
+    └── server.py              # FastMCP server: respond tool, contexts resource, entry point
 
 tests/
 ├── core/ adapters/ plugins/   # Unit tests mirroring src/ooagent/ package-for-package
 ├── conformance/               # IAgent / IDomainContext / ITool / ILLMClient conformance suites (§17)
+├── workflow/                  # SpecDrivenWorkflow unit + traceability tests
+├── mcp/                       # MCP server config/integration tests
 ├── stub_llm_client.py         # Deterministic ILLMClient for unit tests
 ├── null_context.py            # Re-exports NullContext
 └── fixtures.py                 # Common Query/Solution/Artifact test doubles
@@ -444,6 +456,8 @@ tests/
 - `adapters/` depends on `core/` and external packages (`httpx`, `opentelemetry-*`) — never on `contexts/` or `plugins/`.
 - `contexts/` depends on `core/protocols.py` only.
 - `plugins/` depends on `core/protocols.py` + any `adapters/` they need.
+- `workflow/` depends on `core/protocols.py` only (`IDeliveryWorkflow` is a peer layer — §24 — never on `core/agent.py` or any other package).
+- `mcp/` depends on `core/`, `contexts/null_context.py`, `adapters/llm/*`, and the external `mcp` SDK package — never on `plugins/` or `workflow/`.
 - Circular imports are caught by `mypy --strict` and `ruff` (import-sort/unused-import rules) in CI.
 - Every package exports its public surface via `__init__.py`.
 - Versioning: `core/` is semver-stable. Breaking changes to `IAgent`, `IDomainContext`,
