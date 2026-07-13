@@ -50,6 +50,7 @@ class Invariant:
     condition: str
     severity: Literal["error", "warning"]
     rationale: str
+    check: Callable[[Solution], bool] | None = None
 
 
 @dataclass(frozen=True)

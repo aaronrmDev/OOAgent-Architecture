@@ -14,8 +14,10 @@ from ooagent.core.protocols import (
     IAgent,
     IDeliveryWorkflow,
     ILLMClient,
+    Invariant,
     Phase,
     Query,
+    Solution,
     ToolExecutionError,
     TraceabilityEntry,
 )
@@ -98,3 +100,21 @@ def test_gate_result_is_a_frozen_dataclass() -> None:
     r = GateResult(gate_name="verify-spec", passed=True, message="ok")
     with pytest.raises(FrozenInstanceError):
         r.passed = False  # type: ignore[misc]
+
+
+def test_invariant_check_field_defaults_to_none_and_accepts_a_callable() -> None:
+    bare = Invariant(name="n", condition="c", severity="error", rationale="r")
+    assert bare.check is None
+
+    def _always_true(solution: Solution) -> bool:
+        return True
+
+    checked = Invariant(
+        name="n2",
+        condition="c2",
+        severity="error",
+        rationale="r2",
+        check=_always_true,
+    )
+    assert checked.check is not None
+    assert checked.check(Solution(content="x", format="text", sources=[])) is True
