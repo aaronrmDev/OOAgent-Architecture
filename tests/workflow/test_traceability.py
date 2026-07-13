@@ -148,3 +148,21 @@ def test_scan_spec_directory_returns_empty_tuple_when_artifacts_missing(
     empty_dir.mkdir(parents=True)
 
     assert scan_spec_directory(empty_dir) == ()
+
+
+def test_traceability_module_resolves_this_repos_own_spec_001() -> None:
+    # The actual self-hosted proof, done through the Python module this time
+    # instead of only scripts/sdd-verify-spec.sh (which duplicates this same
+    # check in bash and is the thing CI currently runs).
+    from ooagent.workflow.traceability import scan_specs_root, verify_traceability
+
+    repo_root = Path(__file__).resolve().parents[2]
+    entries = scan_specs_root(repo_root / "specs")
+
+    assert (
+        len(entries) >= 6
+    ), "expected at least 6 REQ/AC pairs from specs/001-spec-driven-workflow-layer"
+
+    results = verify_traceability(entries)
+    failing = [r for r in results if not r.passed]
+    assert failing == [], f"orphan traceability entries found: {failing}"
