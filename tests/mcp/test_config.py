@@ -34,7 +34,7 @@ def test_build_llm_client_gemini() -> None:
 def test_build_llm_client_ollama_needs_no_api_key() -> None:
     client = build_llm_client({"OOAGENT_LLM_VENDOR": "ollama"})
     assert isinstance(client, OllamaLLMClient)
-    assert hasattr(client, "_model_id")
+    assert client._model_id == "llama3.3"
 
 
 def test_build_llm_client_missing_vendor_raises() -> None:
