@@ -28,7 +28,6 @@ VALID_TRANSITIONS: dict[AgentFSMState, set[AgentFSMState]] = {
     "VALIDATING": {"DELIVERING", "FAILURE"},
     "DELIVERING": {"IDLE"},
     "FAILURE": {"DELIVERING"},
-    "DEGRADED": {"IDLE", "FAILURE"},
 }
 
 

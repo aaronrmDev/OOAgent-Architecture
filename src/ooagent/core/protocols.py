@@ -22,7 +22,6 @@ AgentFSMState = Literal[
     "VALIDATING",
     "DELIVERING",
     "FAILURE",
-    "DEGRADED",
 ]
 
 ArtifactFormat = Literal["py", "ts", "md", "json", "sql", "html", "yaml", "mermaid", "text"]

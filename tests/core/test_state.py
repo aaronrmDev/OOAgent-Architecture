@@ -124,3 +124,11 @@ def test_snapshot_eviction_is_lru_not_fifo() -> None:
         state.restore(b.id)  # `b` was least-recently-used — evicted
     state.restore(a.id)  # must not raise — still present
     state.restore(c.id)  # must not raise — still present
+
+
+def test_degraded_is_not_a_valid_fsm_state() -> None:
+    from ooagent.core.state import VALID_TRANSITIONS
+
+    assert "DEGRADED" not in VALID_TRANSITIONS
+    for targets in VALID_TRANSITIONS.values():
+        assert "DEGRADED" not in targets
