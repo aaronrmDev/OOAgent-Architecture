@@ -61,10 +61,19 @@ class ConstraintEngine:
             self._assert(solution, inv)
 
     def _assert(self, solution: Solution, invariant: Invariant) -> None:
-        """Base evaluation: domain contexts provide specialized validators via
-        IDomainContext.invariants() whose conditions are checked at runtime.
-        Override this method in subclasses to add custom validation logic.
-        The base engine passes all invariants — domain contexts narrow this."""
+        """Evaluates `invariant.check(solution)` when a check callable is
+        supplied. An invariant with no check (`check=None`) is documentation-
+        only and always passes — CONTEXT.md-declared invariants (§14 CLAUDE.md)
+        that a domain has not wired a predicate for yet remain non-blocking
+        rather than silently fabricating a pass/fail verdict. A failing
+        `severity="error"` invariant halts the turn; a failing
+        `severity="warning"` invariant does not (§11 CLAUDE.md)."""
+        if invariant.check is None:
+            return
+        if invariant.check(solution):
+            return
+        if invariant.severity == "error":
+            raise ConstraintViolationError(invariant.name, solution.content, {"condition": invariant.condition})
 
 
 def create_step(

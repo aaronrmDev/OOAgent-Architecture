@@ -57,3 +57,46 @@ def test_constraint_engine_assert_all_does_not_raise_by_default() -> None:
     engine = ConstraintEngine.get_instance()
     solution = Solution(content="ok", format="text", sources=[])
     engine.assert_all(solution, [])  # should not raise
+
+
+def test_constraint_engine_raises_on_failing_error_severity_invariant() -> None:
+    from ooagent.core.protocols import Invariant
+
+    engine = ConstraintEngine.get_instance()
+    solution = Solution(content="ok", format="text", sources=[])
+    failing = Invariant(
+        name="always-fails",
+        condition="never true",
+        severity="error",
+        rationale="test",
+        check=lambda s: False,
+    )
+    with pytest.raises(ConstraintViolationError) as exc_info:
+        engine.assert_all(solution, [failing])
+    assert exc_info.value.invariant_name == "always-fails"
+
+
+def test_constraint_engine_does_not_raise_on_failing_warning_severity_invariant() -> None:
+    from ooagent.core.protocols import Invariant
+
+    engine = ConstraintEngine.get_instance()
+    solution = Solution(content="ok", format="text", sources=[])
+    warning = Invariant(
+        name="soft-check",
+        condition="never true",
+        severity="warning",
+        rationale="test",
+        check=lambda s: False,
+    )
+    engine.assert_all(solution, [warning])  # should not raise
+
+
+def test_constraint_engine_does_not_raise_on_passing_invariant() -> None:
+    from ooagent.core.protocols import Invariant
+
+    engine = ConstraintEngine.get_instance()
+    solution = Solution(content="ok", format="text", sources=[])
+    passing = Invariant(
+        name="always-passes", condition="x", severity="error", rationale="test", check=lambda s: True
+    )
+    engine.assert_all(solution, [passing])  # should not raise
