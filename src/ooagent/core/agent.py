@@ -122,7 +122,9 @@ class OOAgent(LLMAgent[Query, Artifact]):
         self._provenance = ProvenanceTracker()
         self._telemetry = telemetry or NULL_TELEMETRY
         self._solver_dispatcher = _SolverDispatcher()
-        self._lifecycle = LifecycleManager(self._plugin_registry, self._state)
+        self._lifecycle = LifecycleManager(
+            self._plugin_registry, self._state, llm_client
+        )
         self._config: AgentConfig | None = None
 
     @property
