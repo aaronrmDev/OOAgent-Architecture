@@ -348,16 +348,11 @@ class OOAgent(LLMAgent[Query, Artifact]):
     def _handle_unrecoverable_failure(
         self, err: Exception, context: IDomainContext | None
     ) -> Artifact:
-        """Recovers from two distinct problems `_handle_failure` can't handle:
-        (1) a failure during the context-resolution prelude, where `context`
-        itself may not be bound yet — there's no object to pass to
-        `_handle_failure(err, context, ...)`, which requires one; and (2) a
-        failure in the DELIVERING block, where `_handle_failure`'s
-        `transition("FAILURE")` would itself be illegal, since
-        `VALID_TRANSITIONS["DELIVERING"] = {"IDLE"}` in state.py is the only
-        legal exit from DELIVERING. `reset()` force-assigns `_fsm = IDLE`
-        unconditionally, bypassing the transition-legality check, which is
-        the only way to safely recover from either case."""
+        """Recovers from a failure in the DELIVERING block, where `_handle_failure`'s
+        `transition("FAILURE")` would be illegal — `VALID_TRANSITIONS["DELIVERING"]
+        = {"IDLE"}` in state.py is the only legal exit from DELIVERING. Uses
+        `reset()` to force-assign `_fsm = IDLE` unconditionally, bypassing the
+        transition-legality check."""
         context_name = context.name if context is not None else "unknown"
         self._telemetry.event(
             "turn.failed",
