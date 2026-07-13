@@ -73,7 +73,11 @@ class ConstraintEngine:
         if invariant.check(solution):
             return
         if invariant.severity == "error":
-            raise ConstraintViolationError(invariant.name, solution.content, {"condition": invariant.condition})
+            raise ConstraintViolationError(
+                invariant.name,
+                solution.content,
+                {"condition": invariant.condition},
+            )
 
 
 def create_step(
