@@ -106,3 +106,43 @@ async def test_health_check_reports_unhealthy_when_llm_ping_fails() -> None:
     )
     await manager.initialize(AgentConfig())
     assert await manager.health_check() == "unhealthy"
+
+
+async def test_health_check_reports_unhealthy_when_llm_ping_raises() -> None:
+    """Test that health_check returns 'unhealthy' when LLM ping raises an exception."""
+
+    class _ExplodingLLMClient(ILLMClient):
+        async def complete(
+            self, request: CompletionRequest
+        ) -> CompletionResponse:
+            raise NotImplementedError
+
+        async def ping(self) -> bool:
+            raise RuntimeError("connection refused")
+
+        def stream(
+            self, request: CompletionRequest
+        ) -> AsyncIterator[CompletionChunk]:
+            raise NotImplementedError
+
+        @property
+        def model_id(self) -> str:
+            return "exploding"
+
+        @property
+        def vendor(self) -> LLMVendor:
+            return "anthropic"
+
+        @property
+        def max_tokens(self) -> int:
+            return 1
+
+        @property
+        def supports_tools(self) -> bool:
+            return False
+
+    manager = LifecycleManager(
+        PluginRegistry(), SessionState(), llm_client=_ExplodingLLMClient()
+    )
+    await manager.initialize(AgentConfig())
+    assert await manager.health_check() == "unhealthy"
