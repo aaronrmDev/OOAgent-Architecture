@@ -58,7 +58,7 @@ files = ["src/ooagent", "tests", "examples"]
 module = ["tests.*", "examples.*"]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
-disable_error_code = ["arg-type", "union-attr", "index", "no-untyped-call", "type-arg", "list-item"]
+disable_error_code = ["arg-type", "union-attr", "index", "no-untyped-call", "list-item"]
 
 [tool.ruff]
 target-version = "py311"

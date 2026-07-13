@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from ooagent.adapters.tools.base import BaseTool
@@ -158,7 +160,7 @@ class _AlwaysFailingLLMClient(ILLMClient):
 
 class _RecordingTelemetry(ITelemetryProvider):
     def __init__(self) -> None:
-        self.events: list[tuple[str, dict]] = []
+        self.events: list[tuple[str, dict[str, Any]]] = []
 
     async def span(self, name, fn):
         return await fn()
