@@ -36,8 +36,7 @@ def build_llm_client(env: Mapping[str, str] | None = None) -> ILLMClient:
     vendor = env.get(_VENDOR_ENV_VAR)
     if not vendor:
         raise ConfigError(
-            f"{_VENDOR_ENV_VAR} is not set. Set it to one of: "
-            f"{', '.join(_SUPPORTED_VENDORS)}."
+            f"{_VENDOR_ENV_VAR} is not set. Set it to one of: {', '.join(_SUPPORTED_VENDORS)}."
         )
     if vendor not in _SUPPORTED_VENDORS:
         raise ConfigError(
@@ -51,9 +50,7 @@ def build_llm_client(env: Mapping[str, str] | None = None) -> ILLMClient:
     api_key_var = _API_KEY_ENV_VARS[vendor]
     api_key = env.get(api_key_var)
     if not api_key:
-        raise ConfigError(
-            f"{api_key_var} is not set (required for {_VENDOR_ENV_VAR}={vendor})."
-        )
+        raise ConfigError(f"{api_key_var} is not set (required for {_VENDOR_ENV_VAR}={vendor}).")
 
     if vendor == "anthropic":
         return AnthropicLLMClient(AnthropicConfig(api_key=api_key))

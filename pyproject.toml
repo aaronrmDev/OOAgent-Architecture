@@ -26,6 +26,9 @@ dev = [
     "ruff>=0.6",
 ]
 
+[project.scripts]
+ooagent-mcp = "ooagent.mcp.server:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
