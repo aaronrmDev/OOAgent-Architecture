@@ -14,6 +14,7 @@ from ooagent.core.protocols import (
     IPlugin,
     ISolver,
     ITool,
+    LifecycleError,
     PipelineStep,
     ProblemClass,
     Query,
@@ -171,7 +172,13 @@ class PluginRegistry:
         self._plugins[key] = plugin
 
     def verify(self) -> None:
-        """Health check hook — subclasses add specific checks."""
+        """Calls IPlugin.self_check() on every registered plugin — §6
+        CLAUDE.md LifecycleManager responsibility 2 ("PluginRegistry.verify()")."""
+        for plugin in self._plugins.values():
+            if not plugin.self_check():
+                raise LifecycleError(
+                    f"Plugin failed self-check: {plugin.plugin_id}"
+                )
 
     async def dispose_all(self) -> None:
         for plugin in self._plugins.values():

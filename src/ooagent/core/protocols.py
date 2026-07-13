@@ -463,6 +463,12 @@ class IPlugin(ABC):
     @abstractmethod
     def contributes(self) -> PluginContributions: ...
 
+    def self_check(self) -> bool:
+        """Health-check hook — PluginRegistry.verify() calls this on every
+        registered plugin. Default: always healthy. Override to report real
+        readiness (e.g. a cache plugin whose backing store is unreachable)."""
+        return True
+
 
 class ILifecycle(ABC):
     @abstractmethod
