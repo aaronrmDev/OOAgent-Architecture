@@ -107,3 +107,20 @@ def test_subscribe_notifies_observer_on_transition() -> None:
     unsubscribe()
     state.transition("MODELING")
     assert seen == ["GATHERING"]
+
+
+def test_snapshot_eviction_is_lru_not_fifo() -> None:
+    state = SessionState(max_mementos=2)
+    state.transition("GATHERING")
+    a = state.snapshot()
+    state.transition("MODELING")
+    b = state.snapshot()
+
+    state.restore(a.id)  # touches `a` — makes it more-recently-used than `b`
+
+    c = state.snapshot()  # 3rd snapshot exceeds max_mementos=2
+
+    with pytest.raises(ValueError):
+        state.restore(b.id)  # `b` was least-recently-used — evicted
+    state.restore(a.id)  # must not raise — still present
+    state.restore(c.id)  # must not raise — still present
