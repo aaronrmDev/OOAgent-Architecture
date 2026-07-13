@@ -11,9 +11,7 @@ class _FakeMeter:
     def __init__(self) -> None:
         self.gauge_callbacks: dict[str, object] = {}
 
-    def create_observable_gauge(
-        self, name: str, callbacks: list[object]
-    ) -> object:
+    def create_observable_gauge(self, name: str, callbacks: list[object]) -> object:
         self.gauge_callbacks[name] = callbacks[0]
         return object()
 

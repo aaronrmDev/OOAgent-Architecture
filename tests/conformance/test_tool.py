@@ -67,8 +67,7 @@ def test_http_fetch_tool_to_vendor_spec_is_json_serializable() -> None:
     json.dumps(spec)  # must not raise
 
 
-async def test_http_fetch_tool_rejects_non_https_url_without_network_call(
-    ) -> None:
+async def test_http_fetch_tool_rejects_non_https_url_without_network_call() -> None:
     tool = HttpFetchTool()
     with pytest.raises(ToolExecutionError):
         await tool.execute({"url": "http://example.com/data"})

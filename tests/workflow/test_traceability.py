@@ -124,13 +124,11 @@ def test_scan_spec_directory_flags_a_req_with_no_implementing_task_as_orphan(
     spec_dir = tmp_path / "specs" / "999-orphan"
     spec_dir.mkdir(parents=True)
     (spec_dir / "spec.md").write_text(
-        "- **REQ-1**: something must exist.\n"
-        "  - **AC-1**: something is true.\n",
+        "- **REQ-1**: something must exist.\n  - **AC-1**: something is true.\n",
         encoding="utf-8",
     )
     (spec_dir / "tasks.md").write_text(
-        "- [ ] **TASK-1** does unrelated work\n"
-        "  - **TEST-1**: `tests/test_y.py::test_y`\n",
+        "- [ ] **TASK-1** does unrelated work\n  - **TEST-1**: `tests/test_y.py::test_y`\n",
         encoding="utf-8",
     )
 
@@ -159,9 +157,9 @@ def test_traceability_module_resolves_this_repos_own_spec_001() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     entries = scan_specs_root(repo_root / "specs")
 
-    assert (
-        len(entries) >= 6
-    ), "expected at least 6 REQ/AC pairs from specs/001-spec-driven-workflow-layer"
+    assert len(entries) >= 6, (
+        "expected at least 6 REQ/AC pairs from specs/001-spec-driven-workflow-layer"
+    )
 
     results = verify_traceability(entries)
     failing = [r for r in results if not r.passed]

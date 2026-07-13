@@ -34,9 +34,7 @@ class _StubLLMClient(ILLMClient):
         # method) has landed yet — harmless extra method if it hasn't.
         return True
 
-    async def stream(
-        self, request: CompletionRequest
-    ) -> AsyncIterator[CompletionChunk]:
+    async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         yield CompletionChunk(delta="hi", done=True)
 
     @property

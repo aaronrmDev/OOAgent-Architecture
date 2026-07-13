@@ -51,9 +51,7 @@ async def test_datetime_tool_returns_correct_numeric_offset_for_non_utc_timezone
     tool = DateTimeTool()
     result = await tool.execute({"timezone": "America/New_York"})
     assert result["timezone"] == "America/New_York"
-    assert not result["iso"].endswith("Z"), (
-        "non-UTC time must not be labeled with a UTC 'Z' suffix"
-    )
+    assert not result["iso"].endswith("Z"), "non-UTC time must not be labeled with a UTC 'Z' suffix"
     assert re.search(r"[+-]\d{2}:\d{2}$", result["iso"]), result["iso"]
 
 

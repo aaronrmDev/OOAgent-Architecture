@@ -176,9 +176,7 @@ class PluginRegistry:
         CLAUDE.md LifecycleManager responsibility 2 ("PluginRegistry.verify()")."""
         for plugin in self._plugins.values():
             if not plugin.self_check():
-                raise LifecycleError(
-                    f"Plugin failed self-check: {plugin.plugin_id}"
-                )
+                raise LifecycleError(f"Plugin failed self-check: {plugin.plugin_id}")
 
     async def dispose_all(self) -> None:
         for plugin in self._plugins.values():

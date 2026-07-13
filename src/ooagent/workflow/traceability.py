@@ -38,8 +38,7 @@ def verify_traceability(
                     gate_name="verify-spec",
                     passed=False,
                     message=(
-                        f"{entry.req_id}/{entry.ac_id} is an orphan: "
-                        f"missing {', '.join(missing)}"
+                        f"{entry.req_id}/{entry.ac_id} is an orphan: missing {', '.join(missing)}"
                     ),
                 )
             )

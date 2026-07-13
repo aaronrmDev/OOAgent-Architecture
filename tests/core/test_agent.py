@@ -98,13 +98,9 @@ async def test_constraint_engine_is_injectable_and_defaults_to_singleton() -> No
     assert default_agent._constraint_engine is ConstraintEngine.get_instance()
 
     custom_engine = ConstraintEngine()
-    injected_agent = OOAgent(
-        llm_client=_StubLLMClient(), constraint_engine=custom_engine
-    )
+    injected_agent = OOAgent(llm_client=_StubLLMClient(), constraint_engine=custom_engine)
     assert injected_agent._constraint_engine is custom_engine
-    assert (
-        injected_agent._constraint_engine is not ConstraintEngine.get_instance()
-    )
+    assert injected_agent._constraint_engine is not ConstraintEngine.get_instance()
 
 
 async def test_respond_recovers_when_artifact_factory_raises_during_delivering() -> None:
@@ -386,9 +382,7 @@ async def test_turn_failed_event_fires_recoverable_false_on_delivering_failure()
     await agent.dispose()
 
 
-async def test_context_resolution_failure_routes_through_failure_state_not_bypass() -> (
-    None
-):
+async def test_context_resolution_failure_routes_through_failure_state_not_bypass() -> None:
     # §12 CLAUDE.md: "FAILURE always leads to DELIVERING (emit error artifact)
     # then IDLE." A failure during the GATHERING prelude (context resolution)
     # has GATHERING -> FAILURE as a legal transition (state.py VALID_TRANSITIONS),
@@ -437,9 +431,7 @@ async def test_tool_execution_times_out_and_reports_failure_not_hang() -> None:
 
     assert ("tool.call_started", {"tool": "slow"}) in telemetry.events
     failed_events = [
-        e
-        for e in telemetry.events
-        if e[0] == "tool.call_failed" and e[1]["tool"] == "slow"
+        e for e in telemetry.events if e[0] == "tool.call_failed" and e[1]["tool"] == "slow"
     ]
     assert len(failed_events) == 1
     assert failed_events[0][1]["error_type"] == "TimeoutError"
@@ -488,11 +480,7 @@ async def test_llm_call_times_out_and_is_handled_as_a_failure() -> None:
 
     artifact = await agent.respond(Query(text="hello agent"))
 
-    failed_events = [
-        e
-        for e in telemetry.events
-        if e[0] == "llm.call_failed"
-    ]
+    failed_events = [e for e in telemetry.events if e[0] == "llm.call_failed"]
     assert len(failed_events) == 1
     assert failed_events[0][1]["error_type"] == "TimeoutError"
     assert artifact is not None

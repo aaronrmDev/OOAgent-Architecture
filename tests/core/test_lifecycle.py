@@ -72,17 +72,13 @@ async def test_health_check_reports_unhealthy_when_llm_ping_fails() -> None:
     """Test that health_check returns 'unhealthy' when LLM ping fails."""
 
     class _UnreachableLLMClient(ILLMClient):
-        async def complete(
-            self, request: CompletionRequest
-        ) -> CompletionResponse:
+        async def complete(self, request: CompletionRequest) -> CompletionResponse:
             raise NotImplementedError
 
         async def ping(self) -> bool:
             return False
 
-        def stream(
-            self, request: CompletionRequest
-        ) -> AsyncIterator[CompletionChunk]:
+        def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
             raise NotImplementedError
 
         @property
@@ -101,9 +97,7 @@ async def test_health_check_reports_unhealthy_when_llm_ping_fails() -> None:
         def supports_tools(self) -> bool:
             return False
 
-    manager = LifecycleManager(
-        PluginRegistry(), SessionState(), llm_client=_UnreachableLLMClient()
-    )
+    manager = LifecycleManager(PluginRegistry(), SessionState(), llm_client=_UnreachableLLMClient())
     await manager.initialize(AgentConfig())
     assert await manager.health_check() == "unhealthy"
 
@@ -112,17 +106,13 @@ async def test_health_check_reports_unhealthy_when_llm_ping_raises() -> None:
     """Test that health_check returns 'unhealthy' when LLM ping raises an exception."""
 
     class _ExplodingLLMClient(ILLMClient):
-        async def complete(
-            self, request: CompletionRequest
-        ) -> CompletionResponse:
+        async def complete(self, request: CompletionRequest) -> CompletionResponse:
             raise NotImplementedError
 
         async def ping(self) -> bool:
             raise RuntimeError("connection refused")
 
-        def stream(
-            self, request: CompletionRequest
-        ) -> AsyncIterator[CompletionChunk]:
+        def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
             raise NotImplementedError
 
         @property
@@ -141,8 +131,6 @@ async def test_health_check_reports_unhealthy_when_llm_ping_raises() -> None:
         def supports_tools(self) -> bool:
             return False
 
-    manager = LifecycleManager(
-        PluginRegistry(), SessionState(), llm_client=_ExplodingLLMClient()
-    )
+    manager = LifecycleManager(PluginRegistry(), SessionState(), llm_client=_ExplodingLLMClient())
     await manager.initialize(AgentConfig())
     assert await manager.health_check() == "unhealthy"
