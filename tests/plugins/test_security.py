@@ -101,6 +101,9 @@ class _StubLLMClient(ILLMClient):
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request):
         yield CompletionChunk(delta="unused", done=True)
 

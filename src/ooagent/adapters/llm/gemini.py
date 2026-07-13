@@ -77,6 +77,9 @@ class GeminiLLMClient(ILLMClient):
 
         return self._parse(response.json())
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         url = (
             f"{self._base_url}/v1beta/models/{self.model_id}:streamGenerateContent"

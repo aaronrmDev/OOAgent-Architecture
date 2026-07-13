@@ -46,6 +46,10 @@ def test_illmclient_cannot_be_instantiated_directly() -> None:
         ILLMClient()  # type: ignore[abstract]
 
 
+def test_illmclient_ping_is_a_required_abstract_method() -> None:
+    assert "ping" in ILLMClient.__abstractmethods__
+
+
 def test_tool_execution_error_preserves_message_and_call_args() -> None:
     err = ToolExecutionError("calculator", {"expression": "1+1"}, ValueError("boom"))
     assert "Tool execution failed: calculator" in str(err)

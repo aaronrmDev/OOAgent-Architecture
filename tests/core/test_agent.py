@@ -28,6 +28,9 @@ class _StubLLMClient(ILLMClient):
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request):
         yield CompletionChunk(delta="hi", done=True)
 
@@ -134,6 +137,9 @@ class _AlwaysFailingLLMClient(ILLMClient):
     async def complete(self, request):
         raise RuntimeError("llm down")
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request):
         yield CompletionChunk(delta="", done=True)
 
@@ -195,6 +201,9 @@ class _ToolUseLLMClient(ILLMClient):
             stop_reason="end_turn",
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
+
+    async def ping(self) -> bool:
+        return True
 
     async def stream(self, request):
         yield CompletionChunk(delta="", done=True)

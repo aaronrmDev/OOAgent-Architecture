@@ -49,6 +49,9 @@ class _StubInnerClient(ILLMClient):
             usage=TokenUsage(input_tokens=1, output_tokens=1),
         )
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         self.stream_calls += 1
         yield CompletionChunk(delta="stub", done=False)

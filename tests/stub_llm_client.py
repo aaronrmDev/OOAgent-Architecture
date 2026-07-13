@@ -105,6 +105,9 @@ class StubLLMClient(ILLMClient):
             usage=TokenUsage(input_tokens=10, output_tokens=20),
         )
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         response = await self.complete(request)
         yield CompletionChunk(delta=response.content, done=False)

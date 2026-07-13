@@ -356,6 +356,9 @@ class ILLMClient(ABC):
     async def complete(self, request: CompletionRequest) -> CompletionResponse: ...
 
     @abstractmethod
+    async def ping(self) -> bool: ...
+
+    @abstractmethod
     def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]: ...
 
     @property
