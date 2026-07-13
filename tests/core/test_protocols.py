@@ -14,8 +14,10 @@ from ooagent.core.protocols import (
     IAgent,
     IDeliveryWorkflow,
     ILLMClient,
+    Invariant,
     Phase,
     Query,
+    Solution,
     ToolExecutionError,
     TraceabilityEntry,
 )
@@ -42,6 +44,42 @@ def test_iagent_cannot_be_instantiated_directly() -> None:
 def test_illmclient_cannot_be_instantiated_directly() -> None:
     with pytest.raises(TypeError):
         ILLMClient()  # type: ignore[abstract]
+
+
+async def test_illmclient_ping_has_a_non_breaking_default_implementation() -> None:
+    # ping() must NOT be abstract — requiring every ILLMClient implementer to
+    # define it would be a breaking change. It ships a concrete default
+    # (mirrors IPlugin.self_check()'s pattern) that implementers may override
+    # to report real connectivity.
+    assert "ping" not in ILLMClient.__abstractmethods__
+
+    class _MinimalLLMClient(ILLMClient):
+        async def complete(self, request):  # pragma: no cover - not exercised
+            raise NotImplementedError
+
+        def stream(self, request):  # pragma: no cover - not exercised
+            raise NotImplementedError
+
+        @property
+        def model_id(self) -> str:
+            return "minimal"
+
+        @property
+        def vendor(self):
+            return "anthropic"
+
+        @property
+        def max_tokens(self) -> int:
+            return 1
+
+        @property
+        def supports_tools(self) -> bool:
+            return False
+
+    assert _MinimalLLMClient.ping is ILLMClient.ping
+
+    client = _MinimalLLMClient()
+    assert await client.ping() is True
 
 
 def test_tool_execution_error_preserves_message_and_call_args() -> None:
@@ -98,3 +136,21 @@ def test_gate_result_is_a_frozen_dataclass() -> None:
     r = GateResult(gate_name="verify-spec", passed=True, message="ok")
     with pytest.raises(FrozenInstanceError):
         r.passed = False  # type: ignore[misc]
+
+
+def test_invariant_check_field_defaults_to_none_and_accepts_a_callable() -> None:
+    bare = Invariant(name="n", condition="c", severity="error", rationale="r")
+    assert bare.check is None
+
+    def _always_true(solution: Solution) -> bool:
+        return True
+
+    checked = Invariant(
+        name="n2",
+        condition="c2",
+        severity="error",
+        rationale="r2",
+        check=_always_true,
+    )
+    assert checked.check is not None
+    assert checked.check(Solution(content="x", format="text", sources=[])) is True

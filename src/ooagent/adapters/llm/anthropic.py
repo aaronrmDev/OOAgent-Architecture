@@ -77,6 +77,9 @@ class AnthropicLLMClient(ILLMClient):
 
         return self._parse(response.json())
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         body = {**self._build_body(request), "stream": True}
         async with httpx.AsyncClient() as client:

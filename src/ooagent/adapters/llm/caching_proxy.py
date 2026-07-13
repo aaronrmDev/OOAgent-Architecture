@@ -57,6 +57,9 @@ class CachingLLMProxy(ILLMClient):
         self._cache[key] = result
         return result
 
+    async def ping(self) -> bool:
+        return await self._inner.ping()
+
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         async for chunk in self._inner.stream(request):
             yield chunk
@@ -110,6 +113,9 @@ class ThrottlingLLMProxy(ILLMClient):
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         await self._throttle()
         return await self._inner.complete(request)
+
+    async def ping(self) -> bool:
+        return await self._inner.ping()
 
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         await self._throttle()

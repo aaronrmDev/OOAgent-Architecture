@@ -7,6 +7,8 @@ integration description this class implements.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from ooagent.core.protocols import (
     Article,
     GateResult,
@@ -17,6 +19,7 @@ from ooagent.core.protocols import (
 )
 from ooagent.workflow.constitution import ARTICLES
 from ooagent.workflow.gate_catalog import GATE_TARGETS
+from ooagent.workflow.traceability import scan_specs_root as _scan_specs_root
 from ooagent.workflow.traceability import verify_traceability as _verify_traceability_entries
 
 PHASES: tuple[Phase, ...] = (
@@ -147,3 +150,8 @@ class SpecDrivenWorkflow(IDeliveryWorkflow):
 
     def verify_traceability(self, entries: tuple[TraceabilityEntry, ...]) -> tuple[GateResult, ...]:
         return _verify_traceability_entries(entries)
+
+    def verify_traceability_for_specs_root(self, specs_root: Path) -> tuple[GateResult, ...]:
+        """Composes scan_specs_root + verify_traceability — the one-call path
+        for "traceability-check every specs/<slug>/ under this root"."""
+        return self.verify_traceability(_scan_specs_root(specs_root))

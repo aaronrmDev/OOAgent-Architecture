@@ -34,8 +34,12 @@ class DateTimeTool(BaseTool):
             tz = "UTC"
         try:
             now = datetime.now(ZoneInfo(tz))
-            return {"iso": now.strftime("%Y-%m-%dT%H:%M:%S") + "Z", "timezone": tz}
+            if tz == "UTC":
+                iso = now.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+            else:
+                iso = now.isoformat(timespec="seconds")
+            return {"iso": iso, "timezone": tz}
         except Exception:
             now_utc = datetime.now(UTC)
-            iso = now_utc.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now_utc.microsecond // 1000:03d}Z"
+            iso = now_utc.strftime("%Y-%m-%dT%H:%M:%S.") + (f"{now_utc.microsecond // 1000:03d}Z")
             return {"iso": iso, "timezone": "UTC"}

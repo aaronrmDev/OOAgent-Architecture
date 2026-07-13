@@ -91,7 +91,7 @@ async def test_caching_proxy_caches_deterministic_completions() -> None:
         async def stream(self, request):
             yield  # pragma: no cover - not exercised in this test
 
-    proxy = CachingLLMProxy(_CountingClient())  # type: ignore[arg-type]
+    proxy = CachingLLMProxy(_CountingClient())
     request = CompletionRequest(messages=[Message(role="user", content="hi")], temperature=0)
     await proxy.complete(request)
     await proxy.complete(request)

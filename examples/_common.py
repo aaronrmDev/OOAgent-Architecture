@@ -49,6 +49,9 @@ class DemoLLMClient(ILLMClient):
             usage=TokenUsage(input_tokens=10, output_tokens=20),
         )
 
+    async def ping(self) -> bool:
+        return True
+
     async def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]:
         yield CompletionChunk(delta=self._response_text, done=False)
         yield CompletionChunk(delta="", done=True)

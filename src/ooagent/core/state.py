@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections import OrderedDict
 
 from ooagent.core.protocols import (
     AgentFSMState,
@@ -27,7 +28,6 @@ VALID_TRANSITIONS: dict[AgentFSMState, set[AgentFSMState]] = {
     "VALIDATING": {"DELIVERING", "FAILURE"},
     "DELIVERING": {"IDLE"},
     "FAILURE": {"DELIVERING"},
-    "DEGRADED": {"IDLE", "FAILURE"},
 }
 
 
@@ -38,7 +38,7 @@ class SessionState(ISessionState):
         self._context_name = "NullContext"
         self._scratch: dict[str, object] = {}
         self._trace: FSMTrace = []
-        self._mementos: dict[str, Memento] = {}
+        self._mementos: OrderedDict[str, Memento] = OrderedDict()
         self._command_log: list[Command] = []
         self._observers: set[StateObserver] = set()
         self._max_mementos = max_mementos
@@ -76,9 +76,7 @@ class SessionState(ISessionState):
 
     def snapshot(self) -> Memento:
         if len(self._mementos) >= self._max_mementos:
-            oldest_key = next(iter(self._mementos), None)
-            if oldest_key is not None:
-                del self._mementos[oldest_key]
+            self._mementos.popitem(last=False)  # evict least-recently-used
         memento = Memento(
             id=str(uuid.uuid4()),
             fsm=self._fsm,
@@ -94,6 +92,7 @@ class SessionState(ISessionState):
         memento = self._mementos.get(id)
         if memento is None:
             raise ValueError(f"Memento not found: {id}")
+        self._mementos.move_to_end(id)  # mark as most-recently-used
         self._fsm = memento.fsm
         self._turn = memento.turn
         self._context_name = memento.context_name

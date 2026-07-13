@@ -29,7 +29,7 @@ assignees: ''
 <!-- If the agent crashed or hung, what FSM state was it in?
      Check SessionState.fsm and the FSMTrace. -->
 
-- FSM state: <!-- IDLE / GATHERING / MODELING / SOLVING / VALIDATING / DELIVERING / FAILURE / DEGRADED -->
+- FSM state: <!-- IDLE / GATHERING / AWAITING / MODELING / SOLVING / VALIDATING / DELIVERING / FAILURE -->
 - Turn number: <!-- SessionState.turn -->
 - Active context: <!-- IDomainContext.name + version -->
 

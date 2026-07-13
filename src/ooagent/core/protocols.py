@@ -22,7 +22,6 @@ AgentFSMState = Literal[
     "VALIDATING",
     "DELIVERING",
     "FAILURE",
-    "DEGRADED",
 ]
 
 ArtifactFormat = Literal["py", "ts", "md", "json", "sql", "html", "yaml", "mermaid", "text"]
@@ -50,6 +49,7 @@ class Invariant:
     condition: str
     severity: Literal["error", "warning"]
     rationale: str
+    check: Callable[[Solution], bool] | None = None
 
 
 @dataclass(frozen=True)
@@ -354,6 +354,12 @@ class ILLMClient(ABC):
     @abstractmethod
     async def complete(self, request: CompletionRequest) -> CompletionResponse: ...
 
+    async def ping(self) -> bool:
+        """Health-probe hook — LifecycleManager.health_check() calls this.
+        Default: always reachable. Override to report real connectivity
+        (a network round-trip, a lightweight API call, etc.)."""
+        return True
+
     @abstractmethod
     def stream(self, request: CompletionRequest) -> AsyncIterator[CompletionChunk]: ...
 
@@ -458,6 +464,12 @@ class IPlugin(ABC):
 
     @abstractmethod
     def contributes(self) -> PluginContributions: ...
+
+    def self_check(self) -> bool:
+        """Health-check hook — PluginRegistry.verify() calls this on every
+        registered plugin. Default: always healthy. Override to report real
+        readiness (e.g. a cache plugin whose backing store is unreachable)."""
+        return True
 
 
 class ILifecycle(ABC):

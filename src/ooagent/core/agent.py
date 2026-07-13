@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -11,7 +12,11 @@ from typing import Any, Generic
 
 from ooagent.core.artifacts import ArtifactFactory, ProvenanceTracker, ResponseDecorator
 from ooagent.core.lifecycle import LifecycleManager
-from ooagent.core.pipeline import ConstraintEngine, ResponsePipeline
+from ooagent.core.pipeline import (
+    ConstraintEngine,
+    ResponsePipeline,
+    empty_query_step,
+)
 from ooagent.core.protocols import (
     AgentConfig,
     Artifact,
@@ -100,6 +105,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
         tool_registry: ToolRegistry | None = None,
         plugin_registry: PluginRegistry | None = None,
         pipeline: ResponsePipeline | None = None,
+        constraint_engine: ConstraintEngine | None = None,
         artifact_factory: ArtifactFactory | None = None,
         decorator: ResponseDecorator | None = None,
         telemetry: ITelemetryProvider | None = None,
@@ -110,14 +116,14 @@ class OOAgent(LLMAgent[Query, Artifact]):
         self._ctx_registry = ctx_registry or ContextRegistry.get_instance()
         self._tool_registry = tool_registry or ToolRegistry()
         self._plugin_registry = plugin_registry or PluginRegistry()
-        self._pipeline = pipeline or ResponsePipeline()
-        self._constraint_engine = ConstraintEngine.get_instance()
+        self._pipeline = pipeline or ResponsePipeline([empty_query_step()])
+        self._constraint_engine = constraint_engine or ConstraintEngine.get_instance()
         self._artifact_factory = artifact_factory or ArtifactFactory()
         self._decorator = decorator or ResponseDecorator()
         self._provenance = ProvenanceTracker()
         self._telemetry = telemetry or NULL_TELEMETRY
         self._solver_dispatcher = _SolverDispatcher()
-        self._lifecycle = LifecycleManager(self._plugin_registry, self._state)
+        self._lifecycle = LifecycleManager(self._plugin_registry, self._state, llm_client)
         self._config: AgentConfig | None = None
 
     @property
@@ -163,7 +169,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 pipeline = self._pipeline.extend(context.pipeline())
                 snapshot = self._state.snapshot()
             except Exception as err:
-                return self._handle_unrecoverable_failure(err, None)
+                return self._handle_failure(err, None, "")
 
             self._state.transition("MODELING")
             try:
@@ -233,6 +239,8 @@ class OOAgent(LLMAgent[Query, Artifact]):
     ) -> Solution:
         config = self._config
         max_rounds = config.max_tool_rounds if config else 5
+        turn_timeout_s = (config.turn_timeout_ms if config else 60_000) / 1000
+        loop_deadline = time.monotonic() + turn_timeout_s
         tools = self._tool_registry.all()
         system_prompt = context.system_prompt_extension()
 
@@ -252,8 +260,11 @@ class OOAgent(LLMAgent[Query, Artifact]):
             self._telemetry.event(
                 "llm.call_started", {"round": _round, "vendor": self._llm_client.vendor}
             )
+            remaining_s = max(0.0, loop_deadline - time.monotonic())
             try:
-                response = await self._llm_client.complete(request)
+                response = await asyncio.wait_for(
+                    self._llm_client.complete(request), timeout=remaining_s
+                )
                 self._lifecycle.record_llm_success()
             except Exception as err:
                 self._lifecycle.record_llm_failure()
@@ -305,8 +316,9 @@ class OOAgent(LLMAgent[Query, Artifact]):
             )
             return {"error": f"Tool not found: {tool_call.name}"}
         self._telemetry.event("tool.call_started", {"tool": tool_call.name})
+        timeout_s = (self._config.tool_timeout_ms if self._config else 30_000) / 1000
         try:
-            result = await tool.execute(tool_call.args)
+            result = await asyncio.wait_for(tool.execute(tool_call.args), timeout=timeout_s)
         except Exception as err:
             _logger.exception("[OOAgent] Tool execution error: %s", tool_call.name)
             self._telemetry.event(
@@ -318,19 +330,24 @@ class OOAgent(LLMAgent[Query, Artifact]):
         return result
 
     def _handle_failure(
-        self, err: Exception, context: IDomainContext, _snapshot_id: str
+        self, err: Exception, context: IDomainContext | None, _snapshot_id: str
     ) -> Artifact:
+        context_name = context.name if context is not None else "unknown"
         self._state.transition("FAILURE")
         self._telemetry.event(
             "turn.failed",
-            {"context": context.name, "error_type": type(err).__name__, "recoverable": True},
+            {
+                "context": context_name,
+                "error_type": type(err).__name__,
+                "recoverable": True,
+            },
         )
         if isinstance(err, ScopeExitError):
-            artifact = self._artifact_factory.build_scope_exit(context.name, err.query)
+            artifact = self._artifact_factory.build_scope_exit(context_name, err.query)
         elif isinstance(err, ConstraintViolationError):
-            artifact = self._artifact_factory.build_error(str(err), context.name)
+            artifact = self._artifact_factory.build_error(str(err), context_name)
         else:
-            artifact = self._artifact_factory.build_error(str(err), context.name)
+            artifact = self._artifact_factory.build_error(str(err), context_name)
         self._state.transition("DELIVERING")
         self._state.reset()
         return artifact
@@ -338,16 +355,11 @@ class OOAgent(LLMAgent[Query, Artifact]):
     def _handle_unrecoverable_failure(
         self, err: Exception, context: IDomainContext | None
     ) -> Artifact:
-        """Recovers from two distinct problems `_handle_failure` can't handle:
-        (1) a failure during the context-resolution prelude, where `context`
-        itself may not be bound yet — there's no object to pass to
-        `_handle_failure(err, context, ...)`, which requires one; and (2) a
-        failure in the DELIVERING block, where `_handle_failure`'s
-        `transition("FAILURE")` would itself be illegal, since
-        `VALID_TRANSITIONS["DELIVERING"] = {"IDLE"}` in state.py is the only
-        legal exit from DELIVERING. `reset()` force-assigns `_fsm = IDLE`
-        unconditionally, bypassing the transition-legality check, which is
-        the only way to safely recover from either case."""
+        """Recovers from a failure in the DELIVERING block, where `_handle_failure`'s
+        `transition("FAILURE")` would be illegal — `VALID_TRANSITIONS["DELIVERING"]
+        = {"IDLE"}` in state.py is the only legal exit from DELIVERING. Uses
+        `reset()` to force-assign `_fsm = IDLE` unconditionally, bypassing the
+        transition-legality check."""
         context_name = context.name if context is not None else "unknown"
         self._telemetry.event(
             "turn.failed",

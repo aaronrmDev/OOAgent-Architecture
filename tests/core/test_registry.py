@@ -9,6 +9,7 @@ from ooagent.core.protocols import (
     IDomainContext,
     IPlugin,
     ITool,
+    LifecycleError,
     PluginContributions,
     ProblemClass,
     Query,
@@ -135,3 +136,61 @@ def test_plugin_registry_rejects_duplicate_registration() -> None:
     registry.register(_FakePlugin())
     with pytest.raises(ValueError):
         registry.register(_FakePlugin())
+
+
+class _HealthyPlugin(IPlugin):
+    @property
+    def plugin_id(self) -> str:
+        return "healthy"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    def on_register(self, agent) -> None:
+        return None
+
+    def on_dispose(self) -> None:
+        return None
+
+    def contributes(self) -> PluginContributions:
+        return PluginContributions()
+
+    def self_check(self) -> bool:
+        return True
+
+
+class _UnhealthyPlugin(IPlugin):
+    @property
+    def plugin_id(self) -> str:
+        return "unhealthy"
+
+    @property
+    def version(self) -> str:
+        return "1.0.0"
+
+    def on_register(self, agent) -> None:
+        return None
+
+    def on_dispose(self) -> None:
+        return None
+
+    def contributes(self) -> PluginContributions:
+        return PluginContributions()
+
+    def self_check(self) -> bool:
+        return False
+
+
+def test_verify_passes_when_all_plugins_self_check_true() -> None:
+    registry = PluginRegistry()
+    registry.register(_HealthyPlugin())
+    registry.verify()  # should not raise
+
+
+def test_verify_raises_lifecycle_error_naming_the_failing_plugin() -> None:
+    registry = PluginRegistry()
+    registry.register(_HealthyPlugin())
+    registry.register(_UnhealthyPlugin())
+    with pytest.raises(LifecycleError, match="unhealthy"):
+        registry.verify()

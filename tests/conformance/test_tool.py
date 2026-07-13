@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 
 from ooagent.core.protocols import ToolExecutionError
 from ooagent.plugins.tool_kit.calculator_tool import CalculatorTool
 from ooagent.plugins.tool_kit.datetime_tool import DateTimeTool
+from ooagent.plugins.tool_kit.http_fetch_tool import HttpFetchTool, HttpFetchToolOptions
 
 date_tool = DateTimeTool()
 calc_tool = CalculatorTool()
@@ -48,3 +50,50 @@ def test_to_vendor_spec_returns_valid_json_for_openai_vendor() -> None:
 def test_name_and_description_are_non_empty_strings() -> None:
     assert len(date_tool.name) > 0, "tool.name must be non-empty"
     assert len(date_tool.description) > 0, "tool.description must be non-empty"
+
+
+# ── HttpFetchTool conformance tests ──────────────────────────────────────
+
+
+def test_http_fetch_tool_name_and_description_are_non_empty() -> None:
+    tool = HttpFetchTool()
+    assert tool.name == "http_fetch"
+    assert len(tool.description) > 0
+
+
+def test_http_fetch_tool_to_vendor_spec_is_json_serializable() -> None:
+    tool = HttpFetchTool()
+    spec = tool.to_vendor_spec("anthropic")
+    json.dumps(spec)  # must not raise
+
+
+async def test_http_fetch_tool_rejects_non_https_url_without_network_call() -> None:
+    tool = HttpFetchTool()
+    with pytest.raises(ToolExecutionError):
+        await tool.execute({"url": "http://example.com/data"})
+
+
+async def test_http_fetch_tool_rejects_disallowed_host() -> None:
+    tool = HttpFetchTool(HttpFetchToolOptions(allowed_hosts=["example.com"]))
+    with pytest.raises(ToolExecutionError):
+        await tool.execute({"url": "https://evil.example.org/data"})
+
+
+async def test_http_fetch_tool_executes_successfully_against_a_mock_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text="ok", headers={"content-type": "text/plain"})
+
+    real_async_client = httpx.AsyncClient
+
+    def _mock_client(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = httpx.MockTransport(_handler)
+        return real_async_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_client)
+
+    tool = HttpFetchTool()
+    result = await tool.execute({"url": "https://example.com/data"})
+    assert result["status"] == 200
+    assert result["body"] == "ok"

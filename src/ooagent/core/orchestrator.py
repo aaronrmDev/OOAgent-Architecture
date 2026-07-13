@@ -8,7 +8,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol, TypeVar
 
-from ooagent.core.protocols import IDomainContext, IOrchestrator, Query, Solution
+from ooagent.core.protocols import AgentConfig, IDomainContext, IOrchestrator, Query, Solution
 
 _logger = logging.getLogger("ooagent.orchestrator")
 
@@ -68,10 +68,12 @@ class MultiAgentOrchestrator(IOrchestrator):
         self,
         agent_factory: SpecialistAgentFactory,
         concurrency: int = 5,
+        config: AgentConfig | None = None,
     ) -> None:
         self._agent_factory = agent_factory
         self._bus = SignalBus()
         self._semaphore = _Semaphore(concurrency)
+        self._config = config or AgentConfig()
 
     @property
     def bus(self) -> SignalBus:
@@ -81,7 +83,11 @@ class MultiAgentOrchestrator(IOrchestrator):
         def _make_task(ctx: IDomainContext) -> Callable[[], Awaitable[Solution]]:
             return lambda: self._run_specialist(query, ctx)
 
-        return await asyncio.gather(*(self._semaphore.run(_make_task(ctx)) for ctx in contexts))
+        orchestration_timeout_s = self._config.orchestration_timeout_ms / 1000
+        return await asyncio.wait_for(
+            asyncio.gather(*(self._semaphore.run(_make_task(ctx)) for ctx in contexts)),
+            timeout=orchestration_timeout_s,
+        )
 
     async def synthesize(self, solutions: list[Solution], original: Query) -> Solution:
         """Default: concatenate. Override with a meta-agent LLM call when available."""
@@ -95,7 +101,8 @@ class MultiAgentOrchestrator(IOrchestrator):
     async def _run_specialist(self, query: Query, ctx: IDomainContext) -> Solution:
         try:
             agent = self._agent_factory(ctx)
-            raw = await agent.respond(query)
+            timeout_s = self._config.specialist_timeout_ms / 1000
+            raw = await asyncio.wait_for(agent.respond(query), timeout=timeout_s)
             solution = Solution(
                 content=raw if isinstance(raw, str) else json.dumps(raw),
                 format="text",

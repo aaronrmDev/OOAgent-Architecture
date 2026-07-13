@@ -6,13 +6,13 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 from ooagent.contexts.null_context import NullContext
 from ooagent.core.agent import OOAgent
-from ooagent.core.protocols import AgentConfig
+from ooagent.core.protocols import AgentConfig, IDomainContext
 from ooagent.core.registry import ContextRegistry
 from ooagent.mcp.server import build_server
 from tests.stub_llm_client import StubLLMClient
 
 
-async def _build_test_agent() -> tuple[OOAgent, list]:
+async def _build_test_agent() -> tuple[OOAgent, list[IDomainContext]]:
     ctx_registry = ContextRegistry()
     null_context = NullContext()
     ctx_registry.register(null_context)

@@ -24,6 +24,7 @@ dev = [
     "pytest-cov>=5.0",
     "mypy>=1.11",
     "ruff>=0.6",
+    "tzdata>=2024.1",
 ]
 
 [project.scripts]
@@ -43,7 +44,21 @@ testpaths = ["tests"]
 [tool.mypy]
 strict = true
 python_version = "3.11"
-packages = ["ooagent"]
+mypy_path = "src"
+files = ["src/ooagent", "tests", "examples"]
+
+# Relaxed for tests/examples only: pytest fixture params (tmp_path, monkeypatch,
+# capsys, ...) are not uniformly annotated by convention, and lightweight
+# test-double classes (_FakeAgent, _CountingTool, ...) duck-type against the
+# ABCs (IAgent, ITool) without nominally subclassing them, plus test assertion
+# code narrows Optional/Union values mypy can't prove non-None/non-narrow by
+# construction — none of this is sloppy test code, it's structural to the
+# test-double and fixture patterns used throughout this suite.
+[[tool.mypy.overrides]]
+module = ["tests.*", "examples.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disable_error_code = ["arg-type", "union-attr", "index", "no-untyped-call", "list-item"]
 
 [tool.ruff]
 target-version = "py311"
