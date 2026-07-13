@@ -20,7 +20,7 @@ concurrency:
 jobs:
   # ── 1. Build ───────────────────────────────────────────────────────────────
   build:
-    name: TypeScript Build
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

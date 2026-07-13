@@ -12,8 +12,8 @@ assignees: ''
 
 ## Reproduction
 
-```typescript
-// Minimal reproduction case
+```python
+# Minimal reproduction case
 ```
 
 ## Expected behavior
@@ -46,5 +46,5 @@ assignees: ''
 - OOAgent version: <!-- e.g. 2026.06.01 -->
 - LLM backend: <!-- Anthropic / OpenAI / Gemini / Ollama -->
 - Model ID: <!-- e.g. claude-opus-4-8 -->
-- Node.js version:
+- Python version:
 - OS:
