@@ -168,7 +168,7 @@ class OOAgent(LLMAgent[Query, Artifact]):
                 pipeline = self._pipeline.extend(context.pipeline())
                 snapshot = self._state.snapshot()
             except Exception as err:
-                return self._handle_unrecoverable_failure(err, None)
+                return self._handle_failure(err, None, "")
 
             self._state.transition("MODELING")
             try:
@@ -323,19 +323,24 @@ class OOAgent(LLMAgent[Query, Artifact]):
         return result
 
     def _handle_failure(
-        self, err: Exception, context: IDomainContext, _snapshot_id: str
+        self, err: Exception, context: IDomainContext | None, _snapshot_id: str
     ) -> Artifact:
+        context_name = context.name if context is not None else "unknown"
         self._state.transition("FAILURE")
         self._telemetry.event(
             "turn.failed",
-            {"context": context.name, "error_type": type(err).__name__, "recoverable": True},
+            {
+                "context": context_name,
+                "error_type": type(err).__name__,
+                "recoverable": True,
+            },
         )
         if isinstance(err, ScopeExitError):
-            artifact = self._artifact_factory.build_scope_exit(context.name, err.query)
+            artifact = self._artifact_factory.build_scope_exit(context_name, err.query)
         elif isinstance(err, ConstraintViolationError):
-            artifact = self._artifact_factory.build_error(str(err), context.name)
+            artifact = self._artifact_factory.build_error(str(err), context_name)
         else:
-            artifact = self._artifact_factory.build_error(str(err), context.name)
+            artifact = self._artifact_factory.build_error(str(err), context_name)
         self._state.transition("DELIVERING")
         self._state.reset()
         return artifact

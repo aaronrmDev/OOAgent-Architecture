@@ -375,3 +375,31 @@ async def test_turn_failed_event_fires_recoverable_false_on_delivering_failure()
     ) in telemetry.events
 
     await agent.dispose()
+
+
+async def test_context_resolution_failure_routes_through_failure_state_not_bypass() -> (
+    None
+):
+    # §12 CLAUDE.md: "FAILURE always leads to DELIVERING (emit error artifact)
+    # then IDLE." A failure during the GATHERING prelude (context resolution)
+    # has GATHERING -> FAILURE as a legal transition (state.py VALID_TRANSITIONS),
+    # so it must not use the FSM-bypassing _handle_unrecoverable_failure path.
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_StubLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig())
+
+    def _boom(query):
+        raise RuntimeError("resolve boom")
+
+    agent._ctx_registry.resolve = _boom  # type: ignore[method-assign]
+
+    artifact = await agent.respond(Query(text="hello agent"))
+
+    assert "resolve boom" in artifact.content
+    assert agent.state.fsm == "IDLE"
+    assert (
+        "turn.failed",
+        {"context": "unknown", "error_type": "RuntimeError", "recoverable": True},
+    ) in telemetry.events
+
+    await agent.dispose()
