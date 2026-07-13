@@ -489,3 +489,83 @@ async def test_llm_call_times_out_and_is_handled_as_a_failure() -> None:
     assert agent.state.fsm == "IDLE"
 
     await agent.dispose()
+
+
+async def test_turn_timeout_ms_bounds_the_whole_turn_not_each_round() -> None:
+    # Regression for the "turn_timeout_ms applied per round" bug: each round
+    # here takes 40ms — comfortably under the 90ms turn_timeout_ms budget on
+    # its own — but three rounds cumulatively take ~120ms, which must exceed
+    # a *whole-turn* budget of 90ms. Under the old per-round-reset bug, every
+    # round would get a fresh 90ms allowance and the turn would succeed after
+    # ~120ms of real time; with the fix, the deadline is fixed at turn start
+    # and the 3rd round starts with only ~10ms of remaining budget, so its
+    # asyncio.wait_for times out immediately.
+    import asyncio
+
+    class _FixedDelayToolUseLLMClient(ILLMClient):
+        def __init__(self) -> None:
+            self._calls = 0
+
+        async def complete(self, request):
+            self._calls += 1
+            await asyncio.sleep(0.04)
+            if self._calls <= 2:
+                return CompletionResponse(
+                    content="",
+                    stop_reason="tool_use",
+                    usage=TokenUsage(input_tokens=1, output_tokens=1),
+                    tool_calls=[ToolCall(id=f"call-{self._calls}", name="noop", args={})],
+                )
+            return CompletionResponse(
+                content="done",
+                stop_reason="end_turn",
+                usage=TokenUsage(input_tokens=1, output_tokens=1),
+            )
+
+        async def ping(self) -> bool:
+            return True
+
+        async def stream(self, request):
+            yield CompletionChunk(delta="", done=True)
+
+        @property
+        def model_id(self):
+            return "fixed-delay-1"
+
+        @property
+        def vendor(self):
+            return "anthropic"
+
+        @property
+        def max_tokens(self):
+            return 4096
+
+        @property
+        def supports_tools(self):
+            return True
+
+    class _NoopTool(BaseTool):
+        name = "noop"
+        description = "does nothing"
+
+        def input_schema(self):
+            return {"type": "object", "properties": {}, "required": []}
+
+        async def execute(self, args):
+            return {"ok": True}
+
+    telemetry = _RecordingTelemetry()
+    agent = OOAgent(llm_client=_FixedDelayToolUseLLMClient(), telemetry=telemetry)
+    await agent.initialize(AgentConfig(turn_timeout_ms=90, max_tool_rounds=5))
+    agent._tool_registry.register(_NoopTool())
+
+    artifact = await agent.respond(Query(text="hello agent"))
+
+    failed_events = [e for e in telemetry.events if e[0] == "llm.call_failed"]
+    assert len(failed_events) == 1
+    assert failed_events[0][1]["error_type"] == "TimeoutError"
+    assert failed_events[0][1]["round"] in (1, 2)
+    assert artifact is not None
+    assert agent.state.fsm == "IDLE"
+
+    await agent.dispose()

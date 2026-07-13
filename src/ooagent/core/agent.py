@@ -239,6 +239,8 @@ class OOAgent(LLMAgent[Query, Artifact]):
     ) -> Solution:
         config = self._config
         max_rounds = config.max_tool_rounds if config else 5
+        turn_timeout_s = (config.turn_timeout_ms if config else 60_000) / 1000
+        loop_deadline = time.monotonic() + turn_timeout_s
         tools = self._tool_registry.all()
         system_prompt = context.system_prompt_extension()
 
@@ -258,10 +260,10 @@ class OOAgent(LLMAgent[Query, Artifact]):
             self._telemetry.event(
                 "llm.call_started", {"round": _round, "vendor": self._llm_client.vendor}
             )
-            timeout_s = (config.turn_timeout_ms if config else 60_000) / 1000
+            remaining_s = max(0.0, loop_deadline - time.monotonic())
             try:
                 response = await asyncio.wait_for(
-                    self._llm_client.complete(request), timeout=timeout_s
+                    self._llm_client.complete(request), timeout=remaining_s
                 )
                 self._lifecycle.record_llm_success()
             except Exception as err:
