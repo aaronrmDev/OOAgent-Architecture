@@ -64,3 +64,17 @@ def test_verify_traceability_delegates_to_traceability_module() -> None:
     )
     (result,) = workflow.verify_traceability((entry,))
     assert result.passed is True
+
+
+def test_verify_traceability_for_specs_root_resolves_this_repos_spec_001() -> None:
+    from pathlib import Path
+
+    from ooagent.workflow.spec_driven import SpecDrivenWorkflow
+
+    repo_root = Path(__file__).resolve().parents[2]
+    workflow = SpecDrivenWorkflow()
+
+    results = workflow.verify_traceability_for_specs_root(repo_root / "specs")
+
+    assert len(results) >= 6
+    assert all(r.passed for r in results)
