@@ -1,6 +1,6 @@
 [project]
 name = "ooagent"
-version = "2026.07.01"
+version = "2026.07.03"
 description = "Object-Oriented AI Agent Framework — backend-agnostic, domain-agnostic"
 readme = "README.md"
 license = { text = "MIT" }
